@@ -7,7 +7,7 @@ I’m currently looking for a **[Job Title, e.g., Full-Stack Sorcerer]** to join
 ### 📜 THE QUEST REQUIREMENTS
 | Attribute | Needed Level | Description |
 | :--- | :--- | :--- |
-| **Intellect (Language)** | Lvl 80+ | Proficiency in `[Language 1]` and `[Language 2]`. |
+| **Intellect (Language)** | Lvl 80+ | Proficiency in `Golang` and `TypeScript`. |
 | **Stamina (Git)** | Lvl 50+ | Ability to handle merge conflicts without losing HP. |
 | **Charisma (Team)** | Lvl 40+ | Communicates well with humans, not just compilers. |
 | **Perception (QA)** | Maxed | You don't just ship bugs; you hunt them. |
@@ -20,6 +20,6 @@ I’m currently looking for a **[Job Title, e.g., Full-Stack Sorcerer]** to join
 ---
 
 ### 📬 HOW TO ACCEPT THE QUEST
-If your build matches what I’m looking for, don't just lurk. Send a message to **[Your Email/LinkedIn/Twitter]** with the subject line: **"LFG: [Your Name]"** or open a "Pull Request" on my contact info.
+If your build matches what I’m looking for, don't just lurk. Send a message to **kase1111@gmail.com** with the subject line: **"LFG: [Your Name]"** or open a "Pull Request" on my contact info.
 
 > *"It's dangerous to go alone! Take this job."*
