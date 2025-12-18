@@ -1,0 +1,57 @@
+version: '3.8'
+
+# Development Docker Compose with hot reload
+
+services:
+  mock-chain:
+    build:
+      context: ./mock-chain
+    ports:
+      - "8545:8545"
+    volumes:
+      - ./mock-chain:/app
+      - /app/node_modules
+    environment:
+      - PORT=8545
+    command: npm start
+    networks:
+      - natlangchain-dev
+
+  mediator-node-dev:
+    build:
+      context: ..
+      dockerfile: Dockerfile.dev
+    depends_on:
+      - mock-chain
+    ports:
+      - "9090:9090"  # Health check port
+    volumes:
+      - ../src:/app/src
+      - ../package.json:/app/package.json
+      - ../tsconfig.json:/app/tsconfig.json
+      - mediator-dev-data:/app/data
+      - ../logs:/app/logs
+      - /app/node_modules
+    environment:
+      - CHAIN_ENDPOINT=http://mock-chain:8545
+      - CHAIN_ID=natlang-mock-1
+      - CONSENSUS_MODE=permissionless
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-claude-3-5-sonnet-20241022}
+      - MEDIATOR_PRIVATE_KEY=demo_private_key_dev
+      - MEDIATOR_PUBLIC_KEY=mediator_pubkey_dev
+      - FACILITATION_FEE_PERCENT=1.0
+      - VECTOR_DB_PATH=/app/data/vector-db
+      - LOG_LEVEL=debug
+    command: npm run dev
+    networks:
+      - natlangchain-dev
+
+networks:
+  natlangchain-dev:
+    driver: bridge
+
+volumes:
+  mediator-dev-data:
