@@ -1167,6 +1167,751 @@ Testing:
 
 ---
 
+---
+
+## ADDITIONAL PROTOCOL SPECIFICATIONS (MP-02 through MP-05)
+
+The following protocols are documented in the repository but have **no current implementation** in the Mediator Node codebase. These represent future expansion of the NatLangChain ecosystem.
+
+---
+
+### MP-02: Proof-of-Effort Receipt Protocol
+
+**Status**: ❌ Not Implemented
+**Specification File**: `MP-02-spec.md`
+**Priority**: MEDIUM-HIGH
+**Purpose**: Record and verify human intellectual effort as cryptographically verifiable receipts
+
+**Key Components from Specification**:
+
+1. **Effort Capture System**
+   - Signal observation (voice transcripts, text edits, command history)
+   - Time-stamping and ordering preservation
+   - Multi-modal input support
+   - Capture modality disclosure
+
+2. **Segmentation Engine**
+   - Time window-based segmentation
+   - Activity boundary detection
+   - Human marker support
+   - Deterministic segmentation rules
+
+3. **Validation System**
+   - Linguistic coherence assessment
+   - Conceptual progression tracking
+   - Internal consistency checking
+   - Synthesis vs duplication detection
+   - Model identity and version disclosure
+
+4. **Receipt Construction**
+   - Receipt ID generation
+   - Time bounds recording
+   - Signal hash references
+   - Deterministic effort summaries
+   - Validation metadata
+
+5. **Anchoring System**
+   - Receipt hash computation
+   - Ledger append operations
+   - Public verifiability
+
+**Implementation Plan**:
+
+```
+Phase 1: Signal Observer Framework (Weeks 1-2)
+├─ Create SignalObserver base class
+├─ Implement TextEditObserver (file change tracking)
+├─ Implement CommandObserver (shell command tracking)
+├─ Add time-stamping and ordering
+├─ Design signal storage format (JSON/protobuf)
+└─ Implement capture modality disclosure
+
+Phase 2: Segmentation Engine (Weeks 2-3)
+├─ Create SegmentationEngine class
+├─ Implement time-window segmentation
+│  ├─ Configurable window sizes
+│  ├─ Activity gap detection
+│  └─ Session boundary handling
+├─ Add activity boundary detection
+├─ Implement human marker support
+│  ├─ CLI command for marking
+│  └─ API endpoint for markers
+└─ Document segmentation rules
+
+Phase 3: Effort Validator (Weeks 3-4)
+├─ Create EffortValidator class
+├─ Implement LLM-based coherence assessment
+├─ Add progression tracking
+│  ├─ Detect logical flow
+│  ├─ Identify learning patterns
+│  └─ Track concept evolution
+├─ Implement consistency checking
+├─ Add duplication detection (copy-paste, AI detection)
+├─ Record model identity and version
+└─ Preserve uncertainty indicators
+
+Phase 4: Receipt Manager (Weeks 4-5)
+├─ Create ReceiptManager class
+├─ Implement receipt ID generation (UUID + hash)
+├─ Build receipt construction pipeline
+│  ├─ Time bounds extraction
+│  ├─ Signal hash aggregation
+│  ├─ Summary generation via LLM
+│  └─ Metadata compilation
+├─ Add validation metadata recording
+├─ Implement receipt linking (prior receipts, external artifacts)
+└─ Create receipt serialization format
+
+Phase 5: Anchoring & Verification (Weeks 5-6)
+├─ Create AnchoringService class
+├─ Implement receipt hashing (SHA-256)
+├─ Add ledger append operations
+│  ├─ Chain API integration
+│  ├─ Local backup storage
+│  └─ Batch anchoring support
+├─ Implement verification endpoints
+│  ├─ Hash recomputation
+│  ├─ Metadata inspection
+│  └─ Ledger inclusion confirmation
+└─ Add failure mode recording
+
+Phase 6: Privacy & Configuration (Week 6)
+├─ Implement signal encryption (at-rest)
+├─ Add access control for raw signals
+├─ Implement observation revocation
+├─ Add receipt visibility controls
+├─ Create CLI commands
+│  ├─ mediator-node effort start
+│  ├─ mediator-node effort stop
+│  ├─ mediator-node effort status
+│  ├─ mediator-node effort receipts
+│  └─ mediator-node effort verify
+└─ Document privacy guarantees
+
+Testing:
+├─ Unit tests for each observer type
+├─ Segmentation algorithm verification
+├─ Validation accuracy benchmarks
+├─ Receipt construction integrity tests
+├─ Anchoring and verification round-trips
+├─ Privacy and access control tests
+└─ Performance benchmarks for high-volume capture
+```
+
+**Estimated Effort**: 6 weeks
+**Dependencies**: LLM provider for validation, chain API for anchoring
+**Risk**: Medium (privacy concerns, accurate effort detection)
+
+---
+
+### MP-03: Dispute & Escalation Protocol
+
+**Status**: ❌ Not Implemented (Challenge submission partially overlaps)
+**Specification File**: `MP-03-spec.md`
+**Priority**: MEDIUM-HIGH
+**Purpose**: Surface, record, and escalate disputes without automated judgment
+
+**Key Components from Specification**:
+
+1. **Dispute Declaration System**
+   - Reference to contested items
+   - Natural language issue description
+   - Escalation path specification
+   - Time-stamping and recording
+
+2. **Evidence Freezing**
+   - Mark records as UNDER DISPUTE
+   - Prevent mutation/deletion
+   - Allow evidence appending with linkage
+
+3. **Clarification Phase (Mediator-Assisted)**
+   - Claim/counterclaim restatement
+   - Factual vs interpretive disagreement identification
+   - Scope narrowing
+   - Voluntary participation
+
+4. **Escalation System**
+   - Explicit escalation declarations
+   - Authority designation
+   - Scope of escalated issues
+   - Human authorship requirement
+
+5. **Dispute Package Transfer**
+   - Bundle all relevant records
+   - Include intents, settlements, ratifications
+   - Include effort receipts and validation metadata
+   - Guarantee completeness
+
+6. **Outcome Recording**
+   - Annotations for external judgments
+   - Reference linking
+   - Immutable history preservation
+
+**Implementation Plan**:
+
+```
+Phase 1: Dispute Declaration (Week 1)
+├─ Create DisputeManager class in src/dispute/
+├─ Implement Dispute type definitions
+│  ├─ DisputeDeclaration
+│  ├─ DisputeStatus (initiated, under_review, escalated, resolved)
+│  ├─ DisputeParty (claimant, respondent)
+│  └─ DisputeEvidence
+├─ Add dispute initiation flow
+│  ├─ Reference validation (check contested items exist)
+│  ├─ Natural language issue parsing
+│  ├─ Time-stamping
+│  └─ Chain API submission
+├─ Implement dispute storage (local + chain)
+└─ Add CLI command: mediator-node dispute create
+
+Phase 2: Evidence Management (Weeks 1-2)
+├─ Implement EvidenceManager class
+├─ Add UNDER_DISPUTE status marking
+│  ├─ Settlement marking
+│  ├─ Intent marking
+│  ├─ Receipt marking (MP-02)
+│  └─ Agreement marking
+├─ Implement mutation prevention
+│  ├─ Pre-update status checks
+│  ├─ Rejection of delete operations
+│  └─ Audit logging for attempts
+├─ Add evidence appending with linkage
+│  ├─ New evidence submission
+│  ├─ Automatic linkage to dispute
+│  └─ Chronological ordering
+└─ Create evidence snapshot export
+
+Phase 3: Clarification Phase (Week 2)
+├─ Extend MediatorRole for dispute clarification
+├─ Implement claim/counterclaim formatting
+│  ├─ Extract claims from prose
+│  ├─ Structure as clear statements
+│  └─ Identify points of contention
+├─ Add LLM-assisted analysis
+│  ├─ Factual vs interpretive classification
+│  ├─ Scope narrowing suggestions
+│  └─ Ambiguity identification
+├─ Implement voluntary participation tracking
+├─ Add clarification output formatting
+└─ Ensure no settlement inference from clarification
+
+Phase 4: Escalation System (Weeks 2-3)
+├─ Implement EscalationManager class
+├─ Create EscalationDeclaration type
+│  ├─ Target authority specification
+│  ├─ Scope of issues
+│  ├─ Human authorship verification
+│  └─ Timestamp and signature
+├─ Add escalation path registry
+│  ├─ Predefined authorities (arbitrator, DAO, court)
+│  ├─ Custom authority registration
+│  └─ Authority contact information
+├─ Implement escalation submission
+│  ├─ Validate authority exists
+│  ├─ Check scope is within dispute
+│  └─ Record on chain
+└─ Add CLI command: mediator-node dispute escalate
+
+Phase 5: Dispute Package Assembly (Week 3)
+├─ Create DisputePackageBuilder class
+├─ Implement comprehensive bundling
+│  ├─ Original intents collection
+│  ├─ Proposed settlements collection
+│  ├─ Ratification history
+│  ├─ Effort receipts (if MP-02 implemented)
+│  ├─ Validation metadata
+│  └─ Timeline reconstruction
+├─ Add package formatting
+│  ├─ Human-readable summary
+│  ├─ Machine-readable JSON
+│  ├─ Cryptographic integrity proof
+│  └─ Export formats (PDF, ZIP, JSON)
+├─ Implement completeness verification
+└─ Add package signing
+
+Phase 6: Outcome Recording & Integration (Weeks 3-4)
+├─ Implement OutcomeRecorder class
+├─ Add annotation system
+│  ├─ External judgment recording
+│  ├─ Reference linking to legal documents
+│  ├─ Resolution status updates
+│  └─ Immutability guarantees
+├─ Integrate with reputation system
+│  ├─ Dispute outcome affects reputation
+│  ├─ Claimant/respondent tracking
+│  └─ False claim penalties
+├─ Add CLI commands
+│  ├─ mediator-node dispute status
+│  ├─ mediator-node dispute list
+│  ├─ mediator-node dispute package
+│  └─ mediator-node dispute resolve
+└─ Create dispute dashboard view
+
+Testing:
+├─ Unit tests for dispute lifecycle
+├─ Evidence freezing verification
+├─ Escalation flow tests
+├─ Package completeness verification
+├─ Integration tests with settlements
+├─ Reputation impact tests
+└─ Access control and authorization tests
+```
+
+**Estimated Effort**: 4 weeks
+**Dependencies**: Settlement system, reputation system
+**Risk**: Medium (legal considerations, abuse prevention)
+
+---
+
+### MP-04: Licensing & Delegation Protocol
+
+**Status**: ❌ Not Implemented (DPoS delegation is different scope)
+**Specification File**: `MP-04-spec.md`
+**Priority**: MEDIUM
+**Purpose**: Explicit granting, scoping, and revocation of rights and authority
+
+**Key Components from Specification**:
+
+1. **License Management**
+   - Subject specification (receipts, artifacts, rights)
+   - Purpose limitation
+   - Duration bounds
+   - Transferability rules
+
+2. **Delegation Management**
+   - Authority scoping
+   - Constraint specification
+   - Revocation conditions
+   - Human ratification requirement
+
+3. **Lifecycle Management**
+   - Proposal phase
+   - Ratification phase
+   - Activation/execution phase
+   - Revocation and expiry handling
+
+4. **Abuse Detection**
+   - Scope violation recording
+   - Unauthorized redelegation detection
+   - Purpose violation tracking
+   - MP-03 integration for disputes
+
+**Implementation Plan**:
+
+```
+Phase 1: License Types & Storage (Week 1)
+├─ Create src/licensing/ module
+├─ Define License types
+│  ├─ LicenseGrant
+│  │  ├─ id, grantor, grantee
+│  │  ├─ subject (receipts, artifacts, negotiation rights)
+│  │  ├─ purpose (allowed use cases array)
+│  │  ├─ limits (prohibited actions array)
+│  │  ├─ duration (start, end, perpetual flag)
+│  │  ├─ transferability (sublicense, redelegate flags)
+│  │  └─ status (proposed, ratified, active, revoked, expired)
+│  └─ LicenseProposal
+├─ Implement LicenseStore (local + chain)
+├─ Add license validation rules
+└─ Create license ID generation
+
+Phase 2: License Lifecycle (Weeks 1-2)
+├─ Create LicenseManager class
+├─ Implement proposal phase
+│  ├─ Grantor-initiated proposals
+│  ├─ Counterparty-initiated proposals
+│  ├─ Mediator-suggested proposals (non-binding)
+│  └─ Proposal expiry handling
+├─ Implement ratification phase
+│  ├─ Natural language ratification parsing
+│  ├─ Explicit scope reference verification
+│  ├─ Duration and transferability confirmation
+│  └─ Signature verification
+├─ Implement activation
+│  ├─ Ledger recording
+│  ├─ Reference immutability lock
+│  └─ Notification to parties
+└─ Add CLI: mediator-node license create/ratify/status
+
+Phase 3: Delegation System (Week 2)
+├─ Define Delegation types
+│  ├─ DelegationGrant
+│  │  ├─ id, delegator, delegate
+│  │  ├─ powers (negotiation, signing, viewing)
+│  │  ├─ constraints (exclusions, limits)
+│  │  ├─ revocationConditions
+│  │  └─ status
+│  └─ DelegationProposal
+├─ Create DelegationManager class
+├─ Implement delegation lifecycle
+│  ├─ Proposal and ratification
+│  ├─ Execution validation
+│  │  ├─ Reference to grant
+│  │  ├─ Bounds checking
+│  │  └─ Invalid action rejection
+│  └─ Action logging
+└─ Add CLI: mediator-node delegate create/revoke/status
+
+Phase 4: Revocation & Expiry (Weeks 2-3)
+├─ Implement automatic expiry checking
+│  ├─ Background expiry scanner
+│  ├─ Expiry notifications
+│  └─ Status updates
+├─ Implement explicit revocation
+│  ├─ Human authorship verification
+│  ├─ Timestamp recording
+│  ├─ Original grant reference
+│  └─ Chain publication
+├─ Handle past action validity
+│  ├─ Actions before revocation remain valid
+│  ├─ Audit trail preservation
+│  └─ Dispute linkage for contested revocations
+└─ Add revocation notifications
+
+Phase 5: Abuse Detection & Integration (Week 3)
+├─ Implement AbuseDetector class
+├─ Add scope violation detection
+│  ├─ Action vs allowed purpose comparison
+│  ├─ Limit violation checking
+│  └─ Temporal bounds validation
+├─ Implement unauthorized redelegation detection
+│  ├─ Transferability flag checking
+│  ├─ Chain of delegation validation
+│  └─ Alert generation
+├─ Integrate with MP-03 disputes
+│  ├─ Auto-generate dispute on abuse detection
+│  ├─ Evidence packaging for violations
+│  └─ Escalation path suggestions
+└─ Add abuse reporting CLI
+
+Phase 6: Settlement Integration (Weeks 3-4)
+├─ Integrate with SettlementManager
+│  ├─ Licensing as settlement term
+│  ├─ Auto-propose licenses for negotiated agreements
+│  └─ License validation before settlement closure
+├─ Integrate with MP-02 effort receipts
+│  ├─ License effort as subject
+│  ├─ Effort-based licensing conditions
+│  └─ Receipt reference in licenses
+├─ Add license query endpoints
+│  ├─ By grantor
+│  ├─ By grantee
+│  ├─ By subject
+│  └─ By status
+└─ Create license dashboard
+
+Testing:
+├─ License lifecycle unit tests
+├─ Delegation bounds enforcement tests
+├─ Revocation flow tests
+├─ Abuse detection accuracy tests
+├─ Integration tests with settlements
+├─ Integration tests with disputes
+└─ Performance tests for license lookups
+```
+
+**Estimated Effort**: 4 weeks
+**Dependencies**: Settlement system, reputation system, MP-02 (for effort licensing)
+**Risk**: Medium (legal complexity, authority chain validation)
+
+---
+
+### MP-05: Settlement & Capitalization Interface
+
+**Status**: ❌ Not Implemented
+**Specification File**: `MP-05-spec.md`
+**Priority**: MEDIUM
+**Purpose**: Transform agreements into settlements and capital instruments
+
+**Key Components from Specification**:
+
+1. **Settlement Declaration**
+   - Referenced agreements and receipts
+   - Satisfaction statement
+   - Value description
+   - Party identification
+
+2. **Mutual Settlement**
+   - Multi-party declaration requirement
+   - No probabilistic closure
+   - Explicit declaration enforcement
+
+3. **Settlement Records**
+   - Upstream artifact references
+   - Immutable time-stamped records
+   - Descriptive (not executable)
+
+4. **Capitalization Interface**
+   - Settlement identifier
+   - Value description (amount, formula, rights)
+   - Conditions and vesting rules
+   - External execution references
+
+5. **Partial & Staged Settlement**
+   - Partial obligation settlement
+   - Milestone-based capitalization
+   - Rolling value recognition
+
+6. **External System Integration**
+   - Smart contract interfaces
+   - Payment processor integration
+   - Accounting system exports
+   - Legal agreement formatting
+
+**Implementation Plan**:
+
+```
+Phase 1: Settlement Declaration System (Week 1)
+├─ Create src/capitalization/ module
+├─ Define Settlement types
+│  ├─ SettlementDeclaration
+│  │  ├─ id, declarant, timestamp
+│  │  ├─ referencedAgreements[]
+│  │  ├─ referencedReceipts[]
+│  │  ├─ satisfactionStatement (prose)
+│  │  ├─ valueRealized (description)
+│  │  └─ status (declared, mutual, recorded, disputed)
+│  └─ MutualSettlement
+├─ Create SettlementDeclarationManager class
+├─ Implement precondition validation
+│  ├─ MP-01 ratification check
+│  ├─ MP-02 receipt existence check
+│  ├─ MP-04 license validity check
+│  └─ MP-03 no active disputes check
+└─ Add declaration submission API
+
+Phase 2: Settlement Record Management (Weeks 1-2)
+├─ Create SettlementRecordManager class
+├─ Implement record construction
+│  ├─ Upstream artifact aggregation
+│  ├─ Immutability enforcement
+│  ├─ Timestamp verification
+│  └─ Completeness validation
+├─ Implement mutual settlement flow
+│  ├─ Track per-party declarations
+│  ├─ Await all required parties
+│  ├─ Enforce no inference from silence
+│  └─ Create unified settlement record
+├─ Add settlement record storage
+│  ├─ Local persistence
+│  ├─ Chain anchoring
+│  └─ Cross-reference indexing
+└─ Create settlement record export
+
+Phase 3: Capitalization Interface (Weeks 2-3)
+├─ Create CapitalizationInterfaceBuilder class
+├─ Define interface types
+│  ├─ CapitalizationInterface
+│  │  ├─ settlementId
+│  │  ├─ valueDescription (amount, formula, rights)
+│  │  ├─ conditions[]
+│  │  ├─ vestingRules (if applicable)
+│  │  └─ externalRefs[]
+│  └─ ValueDescriptor
+├─ Implement value description formats
+│  ├─ Fixed amount
+│  ├─ Percentage/formula
+│  ├─ Rights (access, usage, ownership)
+│  └─ Hybrid combinations
+├─ Add conditions and vesting
+│  ├─ Time-based vesting
+│  ├─ Milestone conditions
+│  ├─ Performance metrics
+│  └─ Compound conditions
+└─ Generate interface documents
+
+Phase 4: Partial & Staged Settlement (Week 3)
+├─ Implement PartialSettlementManager
+├─ Add partial obligation tracking
+│  ├─ Obligation breakdown
+│  ├─ Completion percentage
+│  ├─ Remaining obligations
+│  └─ Partial declaration validation
+├─ Implement milestone support
+│  ├─ Milestone definition
+│  ├─ Milestone completion tracking
+│  ├─ Progressive capitalization
+│  └─ Milestone dispute handling
+├─ Add rolling/streaming recognition
+│  ├─ Continuous effort streams
+│  ├─ Periodic value snapshots
+│  └─ Cumulative settlement records
+└─ Stage transition automation
+
+Phase 5: External System Integration (Weeks 3-4)
+├─ Create ExternalInterfaceAdapter base class
+├─ Implement smart contract interface
+│  ├─ Ethereum/EVM ABI generation
+│  ├─ Settlement parameter encoding
+│  ├─ Event emission format
+│  └─ Example Solidity template
+├─ Implement payment processor interface
+│  ├─ Stripe/PayPal webhook format
+│  ├─ Invoice generation
+│  ├─ Payment reference tracking
+│  └─ Reconciliation support
+├─ Implement accounting export
+│  ├─ CSV/Excel export
+│  ├─ QuickBooks format
+│  ├─ Xero integration
+│  └─ General ledger format
+├─ Implement legal document generation
+│  ├─ Settlement agreement template
+│  ├─ Variable substitution
+│  ├─ PDF generation
+│  └─ Signature placeholders
+└─ Add integration configuration
+
+Phase 6: Failure & Reversal Handling (Week 4)
+├─ Implement dispute integration
+│  ├─ MP-03 escalation triggers
+│  ├─ Settlement freeze on dispute
+│  ├─ Evidence preservation
+│  └─ Reversal recording
+├─ Add reversal system
+│  ├─ Reversal declaration
+│  ├─ New record creation (not erasure)
+│  ├─ Linked reversal chain
+│  └─ Audit trail maintenance
+├─ Implement abuse detection
+│  ├─ Premature settlement attempts
+│  ├─ Settlement under dispute
+│  ├─ Invalid upstream references
+│  └─ Audit logging
+├─ Add CLI commands
+│  ├─ mediator-node settlement declare
+│  ├─ mediator-node settlement status
+│  ├─ mediator-node settlement export
+│  ├─ mediator-node capitalize generate
+│  └─ mediator-node capitalize export
+└─ Create settlement dashboard
+
+Testing:
+├─ Settlement declaration validation tests
+├─ Mutual settlement flow tests
+├─ Capitalization interface generation tests
+├─ Partial/staged settlement tests
+├─ External integration format tests
+├─ Dispute and reversal handling tests
+├─ End-to-end value realization tests
+└─ Security and abuse prevention tests
+```
+
+**Estimated Effort**: 4 weeks
+**Dependencies**: MP-01 settlements, MP-02 receipts, MP-03 disputes, MP-04 licensing
+**Risk**: High (external system complexity, financial accuracy requirements)
+
+---
+
+## COMPREHENSIVE PROTOCOL IMPLEMENTATION ROADMAP
+
+### Updated Priority Matrix
+
+**Phase 1: Core Stability (Months 1-3)**
+1. ✅ Comprehensive Test Suite (4 weeks) - Foundation
+2. Challenge Proof Submission (2-3 weeks) - Core MP-01 completion
+3. Sybil Resistance (3 weeks) - Network security
+4. Semantic Consensus (3-4 weeks) - High-value settlement security
+
+**Phase 2: Protocol Expansion (Months 3-6)**
+5. MP-03 Dispute & Escalation (4 weeks) - Conflict handling
+6. Complete Governance System (4 weeks) - Protocol evolution
+7. Multi-Chain Orchestration (3-4 weeks) - Scaling
+8. Fee Distribution to Delegators (2 weeks) - Economic completeness
+
+**Phase 3: Advanced Features (Months 6-9)**
+9. MP-02 Proof-of-Effort (6 weeks) - Effort verification
+10. MP-04 Licensing & Delegation (4 weeks) - Rights management
+11. DPoS Validator Rotation (2 weeks) - Proper DPoS
+
+**Phase 4: Capitalization & Optimization (Months 9-12)**
+12. MP-05 Settlement & Capitalization (4 weeks) - Value realization
+13. WebSocket Real-Time Updates (2 weeks) - Performance
+14. Intent Clustering & Batch Mediation (2 weeks) - Efficiency
+15. ML-Based Candidate Prioritization (2-3 weeks) - Optimization
+16. Distributed Mediator Coordination (3 weeks) - Advanced scaling
+
+### Total Estimated Implementation Effort
+
+| Protocol | Weeks | Priority | Dependencies |
+|----------|-------|----------|--------------|
+| Test Suite | 4 | HIGH | None |
+| Challenge Proofs | 2-3 | HIGH | None |
+| Sybil Resistance | 3 | HIGH | None |
+| Semantic Consensus | 3-4 | HIGH | Multi-node coordination |
+| MP-03 Disputes | 4 | MEDIUM-HIGH | Settlements |
+| Governance | 4 | MEDIUM | Chain API |
+| Multi-Chain | 3-4 | MEDIUM | None |
+| Fee Distribution | 2 | MEDIUM | DPoS |
+| MP-02 Effort | 6 | MEDIUM-HIGH | LLM, Chain API |
+| MP-04 Licensing | 4 | MEDIUM | MP-02, Settlements |
+| DPoS Rotation | 2 | MEDIUM | Stake tracking |
+| MP-05 Capitalization | 4 | MEDIUM | MP-01-04 |
+| WebSocket | 2 | LOW | Chain API WS |
+| Batch Mediation | 2 | LOW | None |
+| ML Prioritization | 2-3 | LOW | Historical data |
+| Distributed Coord | 3 | LOW | Distributed infra |
+
+**Total: ~50-55 weeks of development effort**
+
+### Protocol Dependency Graph
+
+```
+                    ┌─────────────────────┐
+                    │  MP-01 (Core Spec)  │
+                    │   ✅ Implemented    │
+                    └──────────┬──────────┘
+                               │
+         ┌─────────────────────┼─────────────────────┐
+         │                     │                     │
+         ▼                     ▼                     ▼
+┌─────────────────┐   ┌─────────────────┐   ┌─────────────────┐
+│   MP-02 Effort  │   │  MP-03 Disputes │   │ MP-04 Licensing │
+│ ❌ Not Started  │   │ ❌ Not Started  │   │ ❌ Not Started  │
+└────────┬────────┘   └────────┬────────┘   └────────┬────────┘
+         │                     │                     │
+         └─────────────────────┼─────────────────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │ MP-05 Capitalization│
+                    │   ❌ Not Started    │
+                    └─────────────────────┘
+```
+
+---
+
+## CROSS-PROTOCOL INTEGRATION REQUIREMENTS
+
+### MP-02 ↔ MP-01 Integration
+- Effort receipts can be referenced in settlement terms
+- Negotiated agreements can specify effort requirements
+- Settlement closure can depend on effort verification
+
+### MP-02 ↔ MP-04 Integration
+- Effort receipts can be subjects of licenses
+- Effort-based licensing conditions
+- License grants referencing receipt ranges
+
+### MP-03 ↔ All Protocols
+- Any protocol artifact can be disputed
+- Evidence freezing applies to all record types
+- Dispute packages include cross-protocol references
+
+### MP-04 ↔ MP-01 Integration
+- Licenses as settlement terms
+- Delegation of negotiation authority
+- License validation before settlement closure
+
+### MP-05 ↔ All Protocols
+- Requires MP-01 ratified agreements
+- References MP-02 effort receipts
+- Validates MP-04 licenses
+- Triggers MP-03 disputes on contested settlements
+
+---
+
 **Document Maintained By**: Claude Code
 **Last Updated**: December 19, 2025
-**Next Review**: After implementation of top 4 priority features
+**Next Review**: After implementation of MP-03 Dispute Protocol
