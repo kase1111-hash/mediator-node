@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  # Mock NatLangChain node for testing
+  mock-chain:
+    build:
+      context: ./examples/mock-chain
+      dockerfile: Dockerfile
+    ports:
+      - "8545:8545"
+    environment:
+      - PORT=8545
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8545/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - natlangchain
+
+  # Mediator node
+  mediator-node:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      mock-chain:
+        condition: service_healthy
+    environment:
+      # Chain configuration
+      - CHAIN_ENDPOINT=http://mock-chain:8545
+      - CHAIN_ID=natlang-mock-1
+      - CONSENSUS_MODE=permissionless
+
+      # LLM configuration (must be set via .env file or command line)
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-claude-3-5-sonnet-20241022}
+
+      # Mediator identity (demo keys - DO NOT USE IN PRODUCTION)
+      - MEDIATOR_PRIVATE_KEY=demo_private_key_for_testing_only
+      - MEDIATOR_PUBLIC_KEY=mediator_pubkey_demo
+      - FACILITATION_FEE_PERCENT=1.0
+
+      # Vector database
+      - VECTOR_DB_PATH=/app/data/vector-db
+      - VECTOR_DIMENSIONS=1536
+      - MAX_INTENTS_CACHE=10000
+
+      # Reputation
+      - REPUTATION_CHAIN_ENDPOINT=http://mock-chain:8545
+
+      # Acceptance window
+      - ACCEPTANCE_WINDOW_HOURS=72
+
+      # Logging
+      - LOG_LEVEL=info
+    volumes:
+      - mediator-data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - natlangchain
+    restart: unless-stopped
+
+  # Optional: Additional mediator for multi-node testing
+  mediator-node-2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      mock-chain:
+        condition: service_healthy
+    environment:
+      - CHAIN_ENDPOINT=http://mock-chain:8545
+      - CHAIN_ID=natlang-mock-1
+      - CONSENSUS_MODE=permissionless
+      - LLM_PROVIDER=${LLM_PROVIDER:-anthropic}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - LLM_MODEL=${LLM_MODEL:-claude-3-5-sonnet-20241022}
+      - MEDIATOR_PRIVATE_KEY=demo_private_key_2_for_testing_only
+      - MEDIATOR_PUBLIC_KEY=mediator_pubkey_demo_2
+      - FACILITATION_FEE_PERCENT=1.0
+      - VECTOR_DB_PATH=/app/data/vector-db
+      - LOG_LEVEL=info
+    volumes:
+      - mediator-data-2:/app/data
+      - ./logs:/app/logs
+    networks:
+      - natlangchain
+    restart: unless-stopped
+    profiles:
+      - multi-node
+
+networks:
+  natlangchain:
+    driver: bridge
+
+volumes:
+  mediator-data:
+  mediator-data-2:

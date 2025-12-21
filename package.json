@@ -8,10 +8,17 @@
   },
   "scripts": {
     "build": "tsc",
-    "start": "node dist/cli.js",
-    "dev": "ts-node src/cli.ts",
+    "start": "node dist/cli.js start",
+    "status": "node dist/cli.js status",
+    "init": "node dist/cli.js init",
+    "dev": "ts-node src/cli.ts start",
     "test": "jest",
-    "lint": "eslint src/**/*.ts"
+    "lint": "eslint src/**/*.ts",
+    "docker:build": "docker-compose build",
+    "docker:up": "docker-compose up",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f mediator-node",
+    "mock-chain": "cd examples/mock-chain && npm install && npm start"
   },
   "keywords": [
     "blockchain",

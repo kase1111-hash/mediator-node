@@ -34,11 +34,15 @@ The Mediator Node is a standalone service that:
 - Governance proposal handling
 - Multi-chain support
 
+## Quick Start
+
+**Want to get started fast?** See [QUICKSTART.md](./QUICKSTART.md) for a 5-minute setup with Docker Compose!
+
 ## Installation
 
 ### Prerequisites
 - Node.js 18+
-- NatLangChain node access (API endpoint)
+- NatLangChain node access (API endpoint) or use our [mock chain](./examples/mock-chain)
 - LLM API key (Anthropic Claude or OpenAI)
 - Optional: Bonded stake (for DPoS) or authority key (for PoA)
 
@@ -67,7 +71,7 @@ nano .env
 ```
 
 Key configuration variables:
-- `CHAIN_ENDPOINT`: Your NatLangChain node URL
+- `CHAIN_ENDPOINT`: Your NatLangChain node URL (or `http://localhost:8545` for mock)
 - `CONSENSUS_MODE`: permissionless | dpos | poa | hybrid
 - `LLM_PROVIDER`: anthropic | openai
 - `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`: Your API key
@@ -81,35 +85,51 @@ npm run build
 
 ## Usage
 
-### Start the Mediator Node
+### Option 1: Docker Compose (Recommended for Testing)
+
+Start everything with one command:
 
 ```bash
-# Using npm
+# Set your API key
+export ANTHROPIC_API_KEY=your-key-here
+
+# Start mock chain + mediator
+docker-compose up
+```
+
+See [QUICKSTART.md](./QUICKSTART.md) for details.
+
+### Option 2: Local Development
+
+**Terminal 1** - Start mock chain (for testing):
+```bash
+npm run mock-chain
+```
+
+**Terminal 2** - Start the mediator:
+```bash
 npm start
+```
 
-# Or use the CLI directly
-node dist/cli.js start
+### Other Commands
 
-# With custom config path
+```bash
+# Check mediator status
+npm run status
+
+# Development mode with hot reload
+npm run dev
+
+# Start with custom config
 node dist/cli.js start --config ./my-config.env
 
 # Run as daemon
 node dist/cli.js start --daemon
-```
 
-### Check Status
-
-```bash
-npm run status
-
-# Or
-node dist/cli.js status
-```
-
-### Development Mode
-
-```bash
-npm run dev
+# Docker commands
+npm run docker:up      # Start with Docker
+npm run docker:logs    # View logs
+npm run docker:down    # Stop
 ```
 
 ## Architecture
@@ -242,17 +262,36 @@ mediator-node/
 npm test
 ```
 
-## API Integration
+## Integration with Other Repositories
 
-The Mediator Node expects the following NatLangChain API endpoints:
+This mediator node integrates with:
+- **NatLangChain Node** - Main blockchain/chain instances
+- **Reputation Chain** (optional) - Separate reputation tracking
+- **LLM Providers** - Anthropic Claude or OpenAI
+
+See [INTEGRATION.md](./INTEGRATION.md) for complete API documentation and multi-repo setup.
+
+### Required NatLangChain API Endpoints
 
 - `GET /api/v1/intents` - Fetch pending intents
 - `POST /api/v1/entries` - Submit settlement entries
 - `GET /api/v1/settlements/:id/status` - Check settlement status
 - `GET /api/v1/reputation/:mediatorId` - Load reputation
 - `POST /api/v1/reputation` - Update reputation
-- `GET /api/v1/delegations/:mediatorId` - Load delegations
+- `GET /api/v1/delegations/:mediatorId` - Load delegations (DPoS)
 - `GET /api/v1/consensus/authorities` - Get PoA authority set
+
+### Testing Without a Real Chain
+
+Use the included **mock chain server** for development:
+
+```bash
+cd examples/mock-chain
+npm install
+npm start
+```
+
+The mock server provides all required endpoints and comes with example intents. See [examples/mock-chain/README.md](./examples/mock-chain/README.md) for details.
 
 ## Security Considerations
 
