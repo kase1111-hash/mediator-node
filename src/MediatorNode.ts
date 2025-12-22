@@ -15,6 +15,7 @@ import { SemanticConsensusManager } from './consensus/SemanticConsensusManager';
 import { SubmissionTracker } from './sybil/SubmissionTracker';
 import { SpamProofDetector } from './sybil/SpamProofDetector';
 import { EffortCaptureSystem } from './effort/EffortCaptureSystem';
+import { DisputeManager } from './dispute/DisputeManager';
 import { logger } from './utils/logger';
 
 /**
@@ -42,6 +43,7 @@ export class MediatorNode {
   private submissionTracker: SubmissionTracker;
   private spamProofDetector: SpamProofDetector;
   private effortCaptureSystem?: EffortCaptureSystem;
+  private disputeManager?: DisputeManager;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -90,6 +92,11 @@ export class MediatorNode {
       this.effortCaptureSystem = new EffortCaptureSystem(config, this.llmProvider);
     }
 
+    // Initialize Dispute & Escalation system (MP-03)
+    if (config.enableDisputeSystem) {
+      this.disputeManager = new DisputeManager(config, this.llmProvider);
+    }
+
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
       consensusMode: config.consensusMode,
@@ -97,6 +104,7 @@ export class MediatorNode {
       semanticConsensusEnabled: config.enableSemanticConsensus || false,
       sybilResistanceEnabled: config.enableSybilResistance || false,
       effortCaptureEnabled: config.enableEffortCapture || false,
+      disputeSystemEnabled: config.enableDisputeSystem || false,
     });
   }
 
@@ -183,6 +191,7 @@ export class MediatorNode {
         sybilResistance: this.config.enableSybilResistance || false,
         spamProofSubmission: this.config.enableSpamProofSubmission || false,
         effortCapture: this.config.enableEffortCapture || false,
+        disputeSystem: this.config.enableDisputeSystem || false,
       });
     } catch (error) {
       logger.error('Error starting mediator node', { error });
@@ -703,6 +712,7 @@ export class MediatorNode {
       receiptsByStatus: Record<string, number>;
       anchoredReceipts: number;
     };
+    disputeStats?: ReturnType<DisputeManager['getStats']>;
   } {
     const burnStats = this.burnManager.getBurnStats();
     const status: any = {
@@ -761,6 +771,11 @@ export class MediatorNode {
         receiptsByStatus: effortStatus.receipts.receiptsByStatus,
         anchoredReceipts: effortStatus.anchoring.totalAnchored,
       };
+    }
+
+    // Include dispute stats if enabled (MP-03)
+    if (this.disputeManager) {
+      status.disputeStats = this.disputeManager.getStats();
     }
 
     return status;
@@ -827,5 +842,12 @@ export class MediatorNode {
    */
   public getSemanticConsensusManager(): SemanticConsensusManager {
     return this.semanticConsensusManager;
+  }
+
+  /**
+   * Get DisputeManager instance for direct access
+   */
+  public getDisputeManager(): DisputeManager | undefined {
+    return this.disputeManager;
   }
 }
