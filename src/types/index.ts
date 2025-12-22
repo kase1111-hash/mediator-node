@@ -136,6 +136,38 @@ export interface GovernanceProposal {
 }
 
 /**
+ * Burn transaction types
+ */
+export type BurnType = 'base_filing' | 'escalated' | 'success' | 'load_scaled';
+
+/**
+ * Burn transaction record
+ */
+export interface BurnTransaction {
+  id: string;
+  type: BurnType;
+  author: string; // Identity that triggered the burn
+  amount: number; // Amount of tokens burned
+  intentHash?: string; // Associated intent (if applicable)
+  settlementId?: string; // Associated settlement (if applicable)
+  multiplier?: number; // Multiplier applied (for escalated/load-scaled)
+  timestamp: number;
+  transactionHash?: string; // On-chain transaction reference
+}
+
+/**
+ * User daily submission tracking
+ */
+export interface UserSubmissionRecord {
+  userId: string;
+  date: string; // YYYY-MM-DD format
+  submissionCount: number;
+  lastSubmissionTime: number;
+  totalBurned: number;
+  burns: BurnTransaction[];
+}
+
+/**
  * Configuration for the mediator node
  */
 export interface MediatorConfig {
@@ -162,6 +194,16 @@ export interface MediatorConfig {
   reputationChainEndpoint?: string;
   acceptanceWindowHours: number;
 
+  // Burn configuration
+  baseFilingBurn?: number; // Base burn amount for intent filing
+  freeDailySubmissions?: number; // Free submissions per 24h (default: 1)
+  burnEscalationBase?: number; // Base multiplier for escalation (default: 2)
+  burnEscalationExponent?: number; // Exponent for escalation (default: 1)
+  successBurnPercentage?: number; // Percentage burn on success (default: 0.05)
+  loadScalingEnabled?: boolean; // Enable load-based scaling (default: false)
+  maxLoadMultiplier?: number; // Maximum load multiplier (default: 10)
+  enableBurnPreview?: boolean; // Show burn estimates before submission (default: true)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -186,7 +228,8 @@ export type ChainEntry =
   | { type: 'challenge'; data: Challenge }
   | { type: 'delegation'; data: Delegation }
   | { type: 'governance'; data: GovernanceProposal }
-  | { type: 'payout'; settlementId: string; amount: number; recipient: string };
+  | { type: 'payout'; settlementId: string; amount: number; recipient: string }
+  | { type: 'burn'; data: BurnTransaction };
 
 /**
  * LLM negotiation result
