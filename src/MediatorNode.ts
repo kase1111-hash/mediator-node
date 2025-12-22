@@ -14,6 +14,7 @@ import { ChallengeManager } from './challenge/ChallengeManager';
 import { SemanticConsensusManager } from './consensus/SemanticConsensusManager';
 import { SubmissionTracker } from './sybil/SubmissionTracker';
 import { SpamProofDetector } from './sybil/SpamProofDetector';
+import { EffortCaptureSystem } from './effort/EffortCaptureSystem';
 import { logger } from './utils/logger';
 
 /**
@@ -40,6 +41,7 @@ export class MediatorNode {
   private semanticConsensusManager: SemanticConsensusManager;
   private submissionTracker: SubmissionTracker;
   private spamProofDetector: SpamProofDetector;
+  private effortCaptureSystem?: EffortCaptureSystem;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -83,12 +85,18 @@ export class MediatorNode {
     this.submissionTracker = new SubmissionTracker(config);
     this.spamProofDetector = new SpamProofDetector(config, this.llmProvider);
 
+    // Initialize Effort Capture system (MP-02)
+    if (config.enableEffortCapture) {
+      this.effortCaptureSystem = new EffortCaptureSystem(config, this.llmProvider);
+    }
+
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
       consensusMode: config.consensusMode,
       challengeSubmissionEnabled: config.enableChallengeSubmission || false,
       semanticConsensusEnabled: config.enableSemanticConsensus || false,
       sybilResistanceEnabled: config.enableSybilResistance || false,
+      effortCaptureEnabled: config.enableEffortCapture || false,
     });
   }
 
@@ -155,6 +163,11 @@ export class MediatorNode {
         this.startSybilResistanceMonitoring();
       }
 
+      // Start Effort Capture system if enabled (MP-02)
+      if (this.effortCaptureSystem) {
+        this.effortCaptureSystem.start();
+      }
+
       // Start load monitoring if enabled
       if (this.config.loadScalingEnabled) {
         const interval = this.config.loadMonitoringInterval || 30000;
@@ -169,6 +182,7 @@ export class MediatorNode {
         semanticConsensus: this.config.enableSemanticConsensus || false,
         sybilResistance: this.config.enableSybilResistance || false,
         spamProofSubmission: this.config.enableSpamProofSubmission || false,
+        effortCapture: this.config.enableEffortCapture || false,
       });
     } catch (error) {
       logger.error('Error starting mediator node', { error });
@@ -191,6 +205,11 @@ export class MediatorNode {
 
     this.ingester.stopPolling();
     this.loadMonitor.stopMonitoring();
+
+    // Stop Effort Capture system if running (MP-02)
+    if (this.effortCaptureSystem) {
+      this.effortCaptureSystem.stop();
+    }
 
     // Save vector database
     await this.vectorDb.save();
@@ -676,6 +695,14 @@ export class MediatorNode {
       rejected: number;
       totalForfeited: number;
     };
+    effortCaptureStats?: {
+      isRunning: boolean;
+      totalReceipts: number;
+      totalSignals: number;
+      totalDurationMinutes: number;
+      receiptsByStatus: Record<string, number>;
+      anchoredReceipts: number;
+    };
   } {
     const burnStats = this.burnManager.getBurnStats();
     const status: any = {
@@ -721,6 +748,19 @@ export class MediatorNode {
     // Include spam proof stats if enabled
     if (this.config.enableSpamProofSubmission) {
       status.spamProofStats = this.spamProofDetector.getSpamProofStats();
+    }
+
+    // Include effort capture stats if enabled (MP-02)
+    if (this.effortCaptureSystem) {
+      const effortStatus = this.effortCaptureSystem.getStatus();
+      status.effortCaptureStats = {
+        isRunning: effortStatus.isRunning,
+        totalReceipts: effortStatus.receipts.totalReceipts,
+        totalSignals: effortStatus.receipts.totalSignals,
+        totalDurationMinutes: effortStatus.receipts.totalDurationMinutes,
+        receiptsByStatus: effortStatus.receipts.receiptsByStatus,
+        anchoredReceipts: effortStatus.anchoring.totalAnchored,
+      };
     }
 
     return status;

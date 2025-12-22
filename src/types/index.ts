@@ -238,6 +238,24 @@ export interface MediatorConfig {
   enableSpamProofSubmission?: boolean; // Allow mediators to submit spam proofs (default: false)
   minSpamConfidence?: number; // Minimum confidence for spam classification (default: 0.9)
 
+  // MP-02: Proof-of-Effort Receipt Protocol configuration
+  enableEffortCapture?: boolean; // Enable effort capture and receipt generation (default: false)
+  effortObserverId?: string; // Unique identifier for this observer instance
+  effortCaptureModalities?: string[]; // Modalities to capture (default: ['text_edit', 'command'])
+  effortSegmentationStrategy?: 'time_window' | 'activity_boundary' | 'hybrid'; // (default: 'time_window')
+  effortTimeWindowMinutes?: number; // Time window for segmentation (default: 30)
+  effortActivityGapMinutes?: number; // Activity gap for boundary detection (default: 10)
+  effortAutoAnchor?: boolean; // Auto-anchor receipts to chain (default: true)
+  effortEncryptSignals?: boolean; // Encrypt raw signals at rest (default: true)
+  effortRetentionDays?: number; // Signal retention period (default: 90, 0 = indefinite)
+
+  // MP-03: Dispute & Escalation Protocol configuration
+  enableDisputeSystem?: boolean; // Enable dispute declaration and handling (default: false)
+  allowDisputeClarification?: boolean; // Allow mediator-assisted clarification (default: true)
+  autoFreezeEvidence?: boolean; // Auto-freeze contested items (default: true)
+  maxClarificationDays?: number; // Max days for clarification phase (default: 14)
+  requireHumanEscalation?: boolean; // Require human authorship for escalations (default: true)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -555,4 +573,302 @@ export interface SubmissionLimitResult {
   freeSubmissionsRemaining: number;
   dailyCount: number;
   reason?: string; // Why submission was blocked (if !allowed)
+}
+
+// ============================================================================
+// MP-02: Proof-of-Effort Receipt Protocol Types
+// ============================================================================
+
+/**
+ * Signal modality types
+ */
+export type SignalModality = 'text_edit' | 'command' | 'voice' | 'structured_tool' | 'other';
+
+/**
+ * Raw observable trace of effort
+ */
+export interface Signal {
+  signalId: string; // Unique signal identifier
+  modality: SignalModality;
+  timestamp: number;
+  content: string; // Raw signal content
+  metadata?: Record<string, any>; // Additional context (file path, command, etc.)
+  hash: string; // SHA-256 hash of content
+}
+
+/**
+ * Effort segment status
+ */
+export type SegmentStatus = 'active' | 'complete' | 'validated' | 'anchored';
+
+/**
+ * Bounded time slice of signals treated as unit of analysis
+ */
+export interface EffortSegment {
+  segmentId: string;
+  startTime: number;
+  endTime: number;
+  signals: Signal[];
+  status: SegmentStatus;
+  humanMarker?: string; // Optional human-provided marker
+  segmentationRule: string; // How this segment was created (time_window, activity_boundary, human_marker)
+}
+
+/**
+ * Validation assessment from LLM
+ */
+export interface ValidationAssessment {
+  validatorId: string; // LLM model identifier
+  modelVersion: string;
+  timestamp: number;
+  coherenceScore: number; // 0-1, linguistic coherence
+  progressionScore: number; // 0-1, conceptual progression
+  consistencyScore: number; // 0-1, internal consistency
+  synthesisScore: number; // 0-1, synthesis vs duplication (0=duplicate, 1=original)
+  summary: string; // Deterministic effort summary
+  uncertaintyFlags: string[]; // Areas of uncertainty or ambiguity
+  evidence: string; // Supporting evidence for scores
+}
+
+/**
+ * Receipt status
+ */
+export type ReceiptStatus = 'draft' | 'validated' | 'anchored' | 'verified';
+
+/**
+ * Cryptographic record attesting effort occurred
+ */
+export interface EffortReceipt {
+  receiptId: string; // UUID + hash
+  segmentId: string;
+  startTime: number;
+  endTime: number;
+  signalHashes: string[]; // Hashes of all signals in segment
+  validation: ValidationAssessment;
+  observerId: string; // System/component that captured signals
+  validatorId: string; // LLM model that validated
+  receiptHash: string; // SHA-256 of receipt contents
+  status: ReceiptStatus;
+  anchoredAt?: number; // Timestamp when anchored to ledger
+  ledgerReference?: string; // Chain/ledger reference
+  priorReceipts?: string[]; // References to previous receipts
+  externalArtifacts?: string[]; // References to external work products
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Receipt verification result
+ */
+export interface ReceiptVerification {
+  receiptId: string;
+  isValid: boolean;
+  hashMatches: boolean;
+  ledgerConfirmed: boolean;
+  validationReproducible: boolean;
+  issues: string[]; // Any verification issues found
+  verifiedAt: number;
+}
+
+/**
+ * Effort capture configuration
+ */
+export interface EffortCaptureConfig {
+  enabled: boolean;
+  observerId: string; // Unique identifier for this observer instance
+  captureModalities: SignalModality[];
+  segmentationStrategy: 'time_window' | 'activity_boundary' | 'hybrid';
+  timeWindowMinutes?: number; // For time_window strategy
+  activityGapMinutes?: number; // For activity_boundary strategy
+  autoAnchor: boolean; // Automatically anchor receipts
+  encryptSignals: boolean; // Encrypt raw signals at rest
+  retentionDays?: number; // How long to keep raw signals (0 = indefinite)
+}
+
+// ============================================================================
+// MP-03: Dispute & Escalation Protocol Types
+// ============================================================================
+
+/**
+ * Dispute status
+ */
+export type DisputeStatus = 'initiated' | 'under_review' | 'clarifying' | 'escalated' | 'resolved' | 'dismissed';
+
+/**
+ * Dispute party role
+ */
+export type DisputePartyRole = 'claimant' | 'respondent';
+
+/**
+ * Dispute party
+ */
+export interface DisputeParty {
+  partyId: string; // Public key or identifier
+  role: DisputePartyRole;
+  name?: string;
+  contactInfo?: string;
+}
+
+/**
+ * Contested item reference
+ */
+export interface ContestedItem {
+  itemType: 'intent' | 'settlement' | 'receipt' | 'agreement' | 'delegation';
+  itemId: string; // Hash or ID of the contested item
+  itemHash?: string; // Hash of the item for verification
+}
+
+/**
+ * Dispute evidence
+ */
+export interface DisputeEvidence {
+  evidenceId: string;
+  disputeId: string;
+  submittedBy: string; // Party ID
+  timestamp: number;
+  evidenceType: 'document' | 'statement' | 'witness' | 'artifact' | 'other';
+  description: string;
+  contentHash?: string; // Hash of evidence content
+  linkedItems?: string[]; // References to other items
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Dispute declaration
+ */
+export interface DisputeDeclaration {
+  disputeId: string;
+  claimant: DisputeParty;
+  respondent?: DisputeParty; // May not be known at declaration time
+  contestedItems: ContestedItem[];
+  issueDescription: string; // Natural language description
+  desiredEscalationPath?: string; // e.g., "arbitration", "DAO", "court"
+  status: DisputeStatus;
+  initiatedAt: number;
+  updatedAt: number;
+  evidence: DisputeEvidence[];
+  clarificationRecord?: ClarificationRecord;
+  escalation?: EscalationDeclaration;
+  resolution?: DisputeResolution;
+}
+
+/**
+ * Clarification record from mediator-assisted phase
+ */
+export interface ClarificationRecord {
+  clarificationId: string;
+  disputeId: string;
+  mediatorId: string; // LLM model identifier
+  startedAt: number;
+  completedAt?: number;
+  claimantStatements: string[]; // Structured claims
+  respondentStatements: string[]; // Structured counterclaims
+  factualDisagreements: string[]; // Points of factual disagreement
+  interpretiveDisagreements: string[]; // Points of interpretive disagreement
+  scopeNarrowing?: string; // Suggested narrowed scope
+  ambiguities: string[]; // Identified ambiguities
+  participationConsent: {
+    claimant: boolean;
+    respondent: boolean;
+  };
+}
+
+/**
+ * Escalation authority types
+ */
+export type EscalationAuthorityType = 'arbitrator' | 'dao' | 'court' | 'review_board' | 'custom';
+
+/**
+ * Escalation authority
+ */
+export interface EscalationAuthority {
+  authorityId: string;
+  authorityType: EscalationAuthorityType;
+  name: string;
+  description?: string;
+  contactInfo?: string;
+  jurisdiction?: string;
+  website?: string;
+}
+
+/**
+ * Escalation declaration
+ */
+export interface EscalationDeclaration {
+  escalationId: string;
+  disputeId: string;
+  escalatedBy: string; // Party ID
+  targetAuthority: EscalationAuthority;
+  scopeOfIssues: string[]; // Specific issues being escalated
+  escalatedAt: number;
+  humanAuthorship: boolean; // Must be true
+  signature?: string; // Cryptographic signature
+  packageId?: string; // Reference to dispute package
+}
+
+/**
+ * Dispute package (bundled records for escalation)
+ */
+export interface DisputePackage {
+  packageId: string;
+  disputeId: string;
+  createdAt: number;
+  createdBy: string;
+  summary: string; // Human-readable summary
+  timeline: DisputeTimelineEntry[];
+  bundledRecords: {
+    intents: Intent[];
+    settlements: ProposedSettlement[];
+    receipts: EffortReceipt[];
+    evidence: DisputeEvidence[];
+    clarifications: ClarificationRecord[];
+  };
+  packageHash: string; // SHA-256 of package contents
+  completenessVerified: boolean;
+  exportFormats?: {
+    json?: string; // JSON export path
+    pdf?: string; // PDF export path
+    zip?: string; // ZIP archive path
+  };
+}
+
+/**
+ * Dispute timeline entry
+ */
+export interface DisputeTimelineEntry {
+  timestamp: number;
+  eventType: 'initiated' | 'evidence_added' | 'clarification_started' | 'clarification_completed' | 'escalated' | 'resolved';
+  actor: string;
+  description: string;
+  referenceId?: string;
+}
+
+/**
+ * Dispute resolution (external judgment recording)
+ */
+export interface DisputeResolution {
+  resolutionId: string;
+  disputeId: string;
+  resolvedAt: number;
+  resolvedBy: string; // Authority or party
+  outcome: 'claimant_favored' | 'respondent_favored' | 'compromise' | 'dismissed' | 'other';
+  outcomeDescription: string;
+  externalReferences?: string[]; // Links to legal documents, rulings, etc.
+  reputationImpact?: {
+    claimant: number;
+    respondent: number;
+  };
+  annotations?: string[];
+  isImmutable: boolean; // Must be true once recorded
+}
+
+/**
+ * Dispute configuration
+ */
+export interface DisputeConfig {
+  enableDisputeSystem: boolean;
+  allowClarification: boolean;
+  autoFreezeEvidence: boolean; // Automatically mark items as UNDER_DISPUTE
+  escalationAuthorities: EscalationAuthority[];
+  maxClarificationDays?: number; // Time limit for clarification phase
+  requireHumanEscalation: boolean; // Require human authorship for escalation
 }
