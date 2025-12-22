@@ -23,6 +23,7 @@ import { EventPublisher } from './websocket/EventPublisher';
 import { HealthMonitor } from './monitoring/HealthMonitor';
 import { PerformanceAnalytics } from './monitoring/PerformanceAnalytics';
 import { MonitoringPublisher } from './monitoring/MonitoringPublisher';
+import { GovernanceManager } from './governance/GovernanceManager';
 import { logger } from './utils/logger';
 
 /**
@@ -58,6 +59,7 @@ export class MediatorNode {
   private healthMonitor?: HealthMonitor;
   private performanceAnalytics?: PerformanceAnalytics;
   private monitoringPublisher?: MonitoringPublisher;
+  private governanceManager?: GovernanceManager;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -154,6 +156,11 @@ export class MediatorNode {
           this.performanceAnalytics
         );
       }
+    }
+
+    // Initialize governance system
+    if (config.enableGovernance) {
+      this.governanceManager = new GovernanceManager(config, this.stakeManager);
     }
 
     logger.info('Mediator node created', {
@@ -272,6 +279,15 @@ export class MediatorNode {
         });
       }
 
+      // Start governance system if enabled
+      if (this.governanceManager) {
+        this.governanceManager.start();
+        logger.info('Governance system started', {
+          votingPeriodDays: this.config.governanceVotingPeriodDays || 7,
+          quorumPercentage: this.config.governanceQuorumPercentage || 30,
+        });
+      }
+
       logger.info('Mediator node started successfully', {
         reputation: this.reputationTracker.getWeight(),
         effectiveStake: this.stakeManager.getEffectiveStake(),
@@ -321,6 +337,11 @@ export class MediatorNode {
 
     if (this.healthMonitor) {
       this.healthMonitor.stop();
+    }
+
+    // Stop governance system if running
+    if (this.governanceManager) {
+      this.governanceManager.stop();
     }
 
     // Stop WebSocket server if running
@@ -1154,5 +1175,12 @@ export class MediatorNode {
    */
   public getMonitoringPublisher(): MonitoringPublisher | undefined {
     return this.monitoringPublisher;
+  }
+
+  /**
+   * Get GovernanceManager instance for direct access
+   */
+  public getGovernanceManager(): GovernanceManager | undefined {
+    return this.governanceManager;
   }
 }
