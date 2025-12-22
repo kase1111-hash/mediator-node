@@ -216,6 +216,49 @@ Effective Stake = Own Bonded Stake + Sum(Active Delegations)
 - Before submission: Validate authority signature
 - During monitoring: Track authority set changes
 
+### 9. ValidatorRotationManager (DPoS)
+
+**Responsibility**: Implement slot-based validator rotation for DPoS consensus
+
+**Key Operations**:
+- Epoch initialization and transitions (24-hour epochs by default)
+- Stake-weighted validator selection (top N validators)
+- Round-robin slot assignment within epochs (10-minute slots)
+- Missed slot tracking and validator jailing
+- Unjail cooldown enforcement (24 hours)
+- Slot-based mediation gating
+
+**Epoch Lifecycle**:
+```
+Epoch Start → Select Top N Validators → Assign Slots → Monitor Activity → Epoch End
+     ↑                                                                        ↓
+     └────────────────────────────────────────────────────────────────────────┘
+```
+
+**Slot Assignment**:
+```
+Within Epoch:
+  Slot 0: Validator[0]  (t=0 to t=10min)
+  Slot 1: Validator[1]  (t=10min to t=20min)
+  Slot 2: Validator[2]  (t=20min to t=30min)
+  ...
+  Slot N: Validator[0]  (Round-robin wraps)
+```
+
+**Jailing Mechanics**:
+- Validators track consecutive missed slots
+- After 3 missed slots (configurable): Auto-jail
+- 24-hour cooldown before unjailing allowed
+- Unjailing resets missed slot counter
+
+**Configuration**:
+- `activeSlots`: Number of active validator slots (default: 21)
+- `rotationPeriodHours`: Epoch duration (default: 24)
+- `slotDurationMinutes`: Slot length (default: 10)
+- `minStakeForRotation`: Minimum stake requirement
+- `jailThreshold`: Missed slots before jailing (default: 3)
+- `unjailCooldownHours`: Cooldown period (default: 24)
+
 ## Data Flow
 
 ### Alignment Cycle Flow
