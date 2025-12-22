@@ -7,12 +7,14 @@ import {
   DisputeStatus,
   DisputeTimelineEntry,
 } from '../types';
+import { LLMProvider } from '../llm/LLMProvider';
 import { nanoid } from 'nanoid';
 import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { EvidenceManager } from './EvidenceManager';
+import { ClarificationManager } from './ClarificationManager';
 
 /**
  * Manages dispute declarations and lifecycle
@@ -23,13 +25,18 @@ export class DisputeManager {
   private disputes: Map<string, DisputeDeclaration> = new Map();
   private dataPath: string;
   private evidenceManager: EvidenceManager;
+  private clarificationManager?: ClarificationManager;
+  private llmProvider?: LLMProvider;
 
   constructor(
     config: MediatorConfig,
+    llmProvider?: LLMProvider,
     dataPath: string = './data/disputes',
-    evidenceDataPath?: string
+    evidenceDataPath?: string,
+    clarificationDataPath?: string
   ) {
     this.config = config;
+    this.llmProvider = llmProvider;
     this.dataPath = dataPath;
 
     // Ensure data directory exists
@@ -41,6 +48,13 @@ export class DisputeManager {
     const evidencePath = evidenceDataPath ||
       (dataPath.includes('test-data') ? dataPath.replace('disputes', 'evidence') : undefined);
     this.evidenceManager = new EvidenceManager(config, evidencePath);
+
+    // Initialize clarification manager if LLM provider is available
+    if (llmProvider && config.allowDisputeClarification !== false) {
+      const clarificationPath = clarificationDataPath ||
+        (dataPath.includes('test-data') ? dataPath.replace('disputes', 'clarifications') : undefined);
+      this.clarificationManager = new ClarificationManager(config, llmProvider, clarificationPath);
+    }
 
     // Load existing disputes
     this.loadDisputes();
@@ -600,6 +614,113 @@ No automated judgment is rendered by this system.
   }
 
   /**
+   * Initiate clarification phase for a dispute
+   */
+  public async initiateClarification(params: {
+    disputeId: string;
+    claimantConsent: boolean;
+    respondentConsent: boolean;
+  }): Promise<{
+    success: boolean;
+    clarificationId?: string;
+    error?: string;
+  }> {
+    if (!this.clarificationManager) {
+      return {
+        success: false,
+        error: 'Clarification system not available (requires LLM provider)',
+      };
+    }
+
+    const dispute = this.disputes.get(params.disputeId);
+
+    if (!dispute) {
+      return {
+        success: false,
+        error: 'Dispute not found',
+      };
+    }
+
+    // Determine mediator ID (use LLM provider name or config)
+    const mediatorId = this.llmProvider?.constructor.name || 'default-mediator';
+
+    const result = await this.clarificationManager.initiateClarification({
+      ...params,
+      mediatorId,
+    });
+
+    if (result.success) {
+      // Update dispute status to clarifying
+      this.updateDisputeStatus(params.disputeId, 'clarifying');
+    }
+
+    return result;
+  }
+
+  /**
+   * Submit a clarification statement
+   */
+  public async submitClarificationStatement(params: {
+    clarificationId: string;
+    submittedBy: string;
+    statementType: 'claim' | 'counterclaim' | 'response';
+    content: string;
+    references?: string[];
+  }) {
+    if (!this.clarificationManager) {
+      return {
+        success: false,
+        error: 'Clarification system not available',
+      };
+    }
+
+    return this.clarificationManager.submitStatement(params);
+  }
+
+  /**
+   * Analyze clarification progress
+   */
+  public async analyzeClarification(clarificationId: string) {
+    if (!this.clarificationManager) {
+      return null;
+    }
+
+    return this.clarificationManager.analyzeClarification(clarificationId);
+  }
+
+  /**
+   * Complete clarification phase
+   */
+  public completeClarification(clarificationId: string) {
+    if (!this.clarificationManager) {
+      return {
+        success: false,
+        error: 'Clarification system not available',
+      };
+    }
+
+    return this.clarificationManager.completeClarification(clarificationId);
+  }
+
+  /**
+   * Get clarification for dispute
+   */
+  public getClarificationsForDispute(disputeId: string) {
+    if (!this.clarificationManager) {
+      return [];
+    }
+
+    return this.clarificationManager.getClarificationsForDispute(disputeId);
+  }
+
+  /**
+   * Get clarification manager (for testing/advanced usage)
+   */
+  public getClarificationManager(): ClarificationManager | undefined {
+    return this.clarificationManager;
+  }
+
+  /**
    * Get statistics
    */
   public getStats(): {
@@ -608,6 +729,7 @@ No automated judgment is rendered by this system.
     totalEvidence: number;
     averageEvidencePerDispute: number;
     evidenceStats?: ReturnType<EvidenceManager['getStats']>;
+    clarificationStats?: ReturnType<ClarificationManager['getStats']>;
   } {
     const disputesByStatus: Record<DisputeStatus, number> = {
       initiated: 0,
@@ -634,6 +756,7 @@ No automated judgment is rendered by this system.
           ? Math.round((totalEvidence / this.disputes.size) * 10) / 10
           : 0,
       evidenceStats: this.evidenceManager.getStats(),
+      clarificationStats: this.clarificationManager?.getStats(),
     };
   }
 }
