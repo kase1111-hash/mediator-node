@@ -204,6 +204,12 @@ export interface MediatorConfig {
   maxLoadMultiplier?: number; // Maximum load multiplier (default: 10)
   enableBurnPreview?: boolean; // Show burn estimates before submission (default: true)
 
+  // LoadMonitor configuration
+  targetIntentRate?: number; // Target intents/minute baseline (default: 10)
+  maxIntentRate?: number; // Maximum sustainable intents/minute (default: 50)
+  loadSmoothingFactor?: number; // Smoothing for gradual adjustments 0-1 (default: 0.3)
+  loadMonitoringInterval?: number; // Load check interval in ms (default: 30000)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 

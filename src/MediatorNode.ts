@@ -7,6 +7,7 @@ import { ReputationTracker } from './reputation/ReputationTracker';
 import { StakeManager } from './consensus/StakeManager';
 import { AuthorityManager } from './consensus/AuthorityManager';
 import { BurnManager } from './burn/BurnManager';
+import { LoadMonitor } from './burn/LoadMonitor';
 import { logger } from './utils/logger';
 
 /**
@@ -27,6 +28,7 @@ export class MediatorNode {
   private stakeManager: StakeManager;
   private authorityManager: AuthorityManager;
   private burnManager: BurnManager;
+  private loadMonitor: LoadMonitor;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -37,6 +39,9 @@ export class MediatorNode {
 
     // Initialize burn manager first (needed by other components)
     this.burnManager = new BurnManager(config);
+
+    // Initialize load monitor
+    this.loadMonitor = new LoadMonitor(config, this.burnManager);
 
     // Initialize components
     this.ingester = new IntentIngester(config, this.burnManager);
@@ -101,9 +106,16 @@ export class MediatorNode {
       // Start settlement monitoring
       this.startSettlementMonitoring();
 
+      // Start load monitoring if enabled
+      if (this.config.loadScalingEnabled) {
+        const interval = this.config.loadMonitoringInterval || 30000;
+        this.loadMonitor.startMonitoring(interval);
+      }
+
       logger.info('Mediator node started successfully', {
         reputation: this.reputationTracker.getWeight(),
         effectiveStake: this.stakeManager.getEffectiveStake(),
+        loadScaling: this.config.loadScalingEnabled || false,
       });
     } catch (error) {
       logger.error('Error starting mediator node', { error });
@@ -125,6 +137,7 @@ export class MediatorNode {
     }
 
     this.ingester.stopPolling();
+    this.loadMonitor.stopMonitoring();
 
     // Save vector database
     await this.vectorDb.save();
@@ -285,9 +298,16 @@ export class MediatorNode {
       totalAmount: number;
       loadMultiplier: number;
     };
+    loadStats?: {
+      intentSubmissionRate: number;
+      activeIntentCount: number;
+      settlementRate: number;
+      currentMultiplier: number;
+      loadFactor: number;
+    };
   } {
     const burnStats = this.burnManager.getBurnStats();
-    return {
+    const status: any = {
       isRunning: this.isRunning,
       cachedIntents: this.ingester.getCachedIntents().length,
       activeSettlements: this.settlementManager.getActiveSettlements().length,
@@ -299,6 +319,20 @@ export class MediatorNode {
         loadMultiplier: this.burnManager.getLoadMultiplier(),
       },
     };
+
+    // Include load stats if monitoring is enabled
+    if (this.config.loadScalingEnabled) {
+      const loadStats = this.loadMonitor.getLoadStats();
+      status.loadStats = {
+        intentSubmissionRate: loadStats.currentMetrics.intentSubmissionRate,
+        activeIntentCount: loadStats.currentMetrics.activeIntentCount,
+        settlementRate: loadStats.currentMetrics.settlementRate,
+        currentMultiplier: loadStats.currentMultiplier,
+        loadFactor: loadStats.loadFactor,
+      };
+    }
+
+    return status;
   }
 
   /**
@@ -313,5 +347,12 @@ export class MediatorNode {
    */
   public getIntentIngester(): IntentIngester {
     return this.ingester;
+  }
+
+  /**
+   * Get LoadMonitor instance for direct access
+   */
+  public getLoadMonitor(): LoadMonitor {
+    return this.loadMonitor;
   }
 }
