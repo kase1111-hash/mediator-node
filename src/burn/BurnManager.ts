@@ -275,8 +275,8 @@ export class BurnManager {
     settlementValue: number,
     mediatorId: string
   ): Promise<BurnTransaction | null> {
-    const successBurnPercentage = this.config.successBurnPercentage ?? 0.05;
-    const burnAmount = settlementValue * (successBurnPercentage / 100);
+    const successBurnPercentage = this.config.successBurnPercentage ?? 0.0005; // Default 0.05%
+    const burnAmount = settlementValue * successBurnPercentage;
 
     // Skip if burn amount is negligible
     if (burnAmount < 0.0001) {
@@ -392,6 +392,13 @@ export class BurnManager {
     }
 
     return stats;
+  }
+
+  /**
+   * Get burn transaction history
+   */
+  public getBurnHistory(): BurnTransaction[] {
+    return [...this.burnHistory];
   }
 
   /**

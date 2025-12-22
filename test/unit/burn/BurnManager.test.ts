@@ -64,7 +64,7 @@ describe('BurnManager', () => {
       freeDailySubmissions: 1,
       burnEscalationBase: 2,
       burnEscalationExponent: 1,
-      successBurnPercentage: 0.05,
+      successBurnPercentage: 0.0005, // 0.05% as decimal
       loadScalingEnabled: false,
       maxLoadMultiplier: 10,
     };
@@ -308,7 +308,7 @@ describe('BurnManager', () => {
     });
 
     it('should handle custom success burn percentage', async () => {
-      const customConfig = { ...config, successBurnPercentage: 0.1 };
+      const customConfig = { ...config, successBurnPercentage: 0.001 }; // 0.1%
       const manager = new BurnManager(customConfig);
 
       mockAxios.post.mockResolvedValue({

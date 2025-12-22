@@ -47,7 +47,7 @@ export class MediatorNode {
     this.ingester = new IntentIngester(config, this.burnManager);
     this.vectorDb = new VectorDatabase(config);
     this.llmProvider = new LLMProvider(config);
-    this.settlementManager = new SettlementManager(config);
+    this.settlementManager = new SettlementManager(config, this.burnManager);
     this.reputationTracker = new ReputationTracker(config);
     this.stakeManager = new StakeManager(config);
     this.authorityManager = new AuthorityManager(config);
@@ -354,5 +354,12 @@ export class MediatorNode {
    */
   public getLoadMonitor(): LoadMonitor {
     return this.loadMonitor;
+  }
+
+  /**
+   * Get SettlementManager instance for direct access
+   */
+  public getSettlementManager(): SettlementManager {
+    return this.settlementManager;
   }
 }

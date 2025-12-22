@@ -14,6 +14,7 @@
  */
 
 import { SettlementManager } from '../../../src/settlement/SettlementManager';
+import { BurnManager } from '../../../src/burn/BurnManager';
 import { MediatorConfig, Intent, NegotiationResult, ProposedSettlement, ConsensusMode } from '../../../src/types';
 import { VALID_INTENT_1, VALID_INTENT_2, VALID_INTENT_3, VALID_INTENT_4 } from '../../fixtures/intents';
 import { createMockConfig } from '../../utils/testUtils';
@@ -22,6 +23,17 @@ import axios from 'axios';
 // Mock axios
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+
+// Mock fs module for BurnManager
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+}));
+
+import * as fs from 'fs';
+const mockFs = fs as jest.Mocked<typeof fs>;
 
 // Mock logger
 jest.mock('../../../src/utils/logger', () => ({
@@ -897,6 +909,225 @@ describe('SettlementManager', () => {
       const active = manager.getActiveSettlements();
       expect(active).toEqual([]);
       expect(Array.isArray(active)).toBe(true);
+    });
+  });
+
+  describe('Burn Integration', () => {
+    let burnManager: BurnManager;
+    let managerWithBurn: SettlementManager;
+
+    beforeEach(() => {
+      // Reset fs mocks
+      mockFs.existsSync.mockReturnValue(false);
+      mockFs.mkdirSync.mockImplementation(() => undefined);
+      mockFs.readFileSync.mockReturnValue('{}');
+      mockFs.writeFileSync.mockImplementation(() => undefined);
+
+      config = createMockConfig({
+        consensusMode: 'permissionless',
+        facilitationFeePercent: 2.0,
+        successBurnPercentage: 0.0005, // 0.05% as decimal
+      });
+
+      burnManager = new BurnManager(config);
+      managerWithBurn = new SettlementManager(config, burnManager);
+    });
+
+    it('should execute success burn when settlement closes', async () => {
+      const settlement = managerWithBurn.createSettlement(
+        VALID_INTENT_1,
+        VALID_INTENT_2,
+        mockNegotiationResult
+      );
+
+      // Calculate expected values
+      // facilitationFee = totalFees × facilitationFeePercent
+      // settlementValue = facilitationFee / (facilitationFeePercent / 100)
+      const totalFees = (VALID_INTENT_1.offeredFee || 0) + (VALID_INTENT_2.offeredFee || 0);
+      const expectedSettlementValue = totalFees;
+      const expectedBurnAmount = expectedSettlementValue * (config.successBurnPercentage || 0.0005);
+
+      mockedAxios.post.mockResolvedValue({ status: 200, data: {} });
+      await managerWithBurn.submitSettlement(settlement);
+
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          partyAAccepted: true,
+          partyBAccepted: true,
+          challenges: [],
+        },
+      });
+
+      await managerWithBurn.monitorSettlements();
+
+      // Should have submit + burn + payout calls
+      expect(mockedAxios.post).toHaveBeenCalledTimes(3);
+
+      // Verify burn was executed
+      const burnCall = mockedAxios.post.mock.calls[1];
+      expect(burnCall[0]).toContain('/burns');
+      const burnData = burnCall[1] as any;
+      expect(burnData.type).toBe('success');
+      expect(burnData.amount).toBeCloseTo(expectedBurnAmount, 2);
+      expect(burnData.settlementId).toBe(settlement.id);
+    });
+
+    it('should not execute burn when BurnManager is not provided', async () => {
+      const managerNoBurn = new SettlementManager(config);
+      const settlement = managerNoBurn.createSettlement(
+        VALID_INTENT_1,
+        VALID_INTENT_2,
+        mockNegotiationResult
+      );
+
+      mockedAxios.post.mockResolvedValue({ status: 200, data: {} });
+      await managerNoBurn.submitSettlement(settlement);
+
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          partyAAccepted: true,
+          partyBAccepted: true,
+          challenges: [],
+        },
+      });
+
+      await managerNoBurn.monitorSettlements();
+
+      // Should only have submit + payout (no burn)
+      expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+      const calls = mockedAxios.post.mock.calls;
+      expect(calls[0][0]).toContain('/entries'); // Submit
+      expect(calls[1][0]).toContain('/entries'); // Payout
+    });
+
+    it('should not fail settlement closure if burn execution fails', async () => {
+      const settlement = managerWithBurn.createSettlement(
+        VALID_INTENT_1,
+        VALID_INTENT_2,
+        mockNegotiationResult
+      );
+
+      // Mock burn to fail
+      mockedAxios.post
+        .mockResolvedValueOnce({ status: 200, data: {} })  // Submit settlement
+        .mockRejectedValueOnce(new Error('Burn failed'))    // Burn fails
+        .mockResolvedValueOnce({ status: 200, data: {} });  // Payout succeeds
+
+      await managerWithBurn.submitSettlement(settlement);
+
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          partyAAccepted: true,
+          partyBAccepted: true,
+          challenges: [],
+        },
+      });
+
+      // Should not throw
+      await expect(managerWithBurn.monitorSettlements()).resolves.not.toThrow();
+
+      // Settlement should still close (payout should be attempted)
+      expect(mockedAxios.post).toHaveBeenCalledTimes(3);
+    });
+
+    it('should not execute burn when settlement value is zero', async () => {
+      const zeroFeeIntent1 = { ...VALID_INTENT_1, offeredFee: 0 };
+      const zeroFeeIntent2 = { ...VALID_INTENT_2, offeredFee: 0 };
+
+      const settlement = managerWithBurn.createSettlement(
+        zeroFeeIntent1,
+        zeroFeeIntent2,
+        mockNegotiationResult
+      );
+
+      mockedAxios.post.mockResolvedValue({ status: 200, data: {} });
+      await managerWithBurn.submitSettlement(settlement);
+
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          partyAAccepted: true,
+          partyBAccepted: true,
+          challenges: [],
+        },
+      });
+
+      await managerWithBurn.monitorSettlements();
+
+      // Should only have submit + payout (no burn for zero value)
+      expect(mockedAxios.post).toHaveBeenCalledTimes(2);
+    });
+
+    it('should not execute burn when settlement has upheld challenges', async () => {
+      const settlement = managerWithBurn.createSettlement(
+        VALID_INTENT_1,
+        VALID_INTENT_2,
+        mockNegotiationResult
+      );
+      settlement.challenges = [
+        {
+          id: 'challenge_1',
+          settlementId: settlement.id,
+          challengerId: 'challenger_123',
+          contradictionProof: 'proof_data',
+          paraphraseEvidence: 'evidence_data',
+          timestamp: Date.now(),
+          status: 'upheld' as const,
+        },
+      ];
+
+      mockedAxios.post.mockResolvedValue({ status: 200, data: {} });
+      await managerWithBurn.submitSettlement(settlement);
+
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          partyAAccepted: true,
+          partyBAccepted: true,
+          challenges: [{ id: 'challenge_1', status: 'upheld' }],
+        },
+      });
+
+      await managerWithBurn.monitorSettlements();
+
+      // Should only have submit (no burn, no payout)
+      expect(mockedAxios.post).toHaveBeenCalledTimes(1);
+    });
+
+    it('should calculate settlement value correctly from facilitation fee', async () => {
+      // Set specific fee percentage for clear calculation
+      config.facilitationFeePercent = 10.0; // 10%
+      const testManager = new SettlementManager(config, burnManager);
+
+      const settlement = testManager.createSettlement(
+        VALID_INTENT_1,
+        VALID_INTENT_2,
+        mockNegotiationResult
+      );
+
+      // totalFees = 100 + 150 = 250
+      // facilitationFee = 250 × 0.1 = 25
+      // settlementValue = 25 / 0.1 = 250
+      // burn = 250 × 0.0005 = 0.125
+
+      mockedAxios.post.mockResolvedValue({ status: 200, data: {} });
+      await testManager.submitSettlement(settlement);
+
+      mockedAxios.get.mockResolvedValue({
+        data: {
+          partyAAccepted: true,
+          partyBAccepted: true,
+          challenges: [],
+        },
+      });
+
+      await testManager.monitorSettlements();
+
+      // Verify burn calculation
+      const burnCall = mockedAxios.post.mock.calls[1];
+      const burnData = burnCall[1] as any;
+      const totalFees = (VALID_INTENT_1.offeredFee || 0) + (VALID_INTENT_2.offeredFee || 0);
+      const expectedBurnAmount = totalFees * (config.successBurnPercentage || 0.0005);
+
+      expect(burnData.amount).toBeCloseTo(expectedBurnAmount, 2);
     });
   });
 
