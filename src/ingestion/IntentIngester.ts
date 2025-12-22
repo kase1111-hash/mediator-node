@@ -2,6 +2,7 @@ import axios from 'axios';
 import { Intent, IntentStatus, MediatorConfig } from '../types';
 import { logger } from '../utils/logger';
 import { generateIntentHash } from '../utils/crypto';
+import { BurnManager } from '../burn/BurnManager';
 
 /**
  * IntentIngester monitors the NatLangChain for new intents
@@ -12,9 +13,11 @@ export class IntentIngester {
   private intentCache: Map<string, Intent> = new Map();
   private lastPollTime: number = 0;
   private pollingInterval: NodeJS.Timeout | null = null;
+  private burnManager: BurnManager | null = null;
 
-  constructor(config: MediatorConfig) {
+  constructor(config: MediatorConfig, burnManager?: BurnManager) {
     this.config = config;
+    this.burnManager = burnManager || null;
   }
 
   /**
@@ -271,5 +274,132 @@ export class IntentIngester {
       const feeB = b.offeredFee || 0;
       return feeB - feeA; // Descending order
     });
+  }
+
+  /**
+   * Preview burn amount required for intent submission
+   * @param userId - User ID submitting the intent
+   * @returns Burn calculation details
+   */
+  public previewIntentBurn(userId: string): {
+    amount: number;
+    isFree: boolean;
+    breakdown: {
+      baseBurn: number;
+      escalationMultiplier: number;
+      loadMultiplier: number;
+      submissionCount: number;
+    };
+  } | null {
+    if (!this.burnManager) {
+      logger.warn('BurnManager not available for burn preview');
+      return null;
+    }
+
+    return this.burnManager.calculateFilingBurn(userId);
+  }
+
+  /**
+   * Submit an intent to the chain with burn validation
+   * This method executes the required burn before submitting the intent
+   *
+   * @param intentData - Intent data to submit
+   * @returns The submitted intent with hash, or null if submission failed
+   */
+  public async submitIntent(intentData: {
+    author: string;
+    prose: string;
+    desires?: string[];
+    constraints?: string[];
+    offeredFee?: number;
+    branch?: string;
+  }): Promise<Intent | null> {
+    // Validate burn manager is available
+    if (!this.burnManager) {
+      logger.error('Cannot submit intent: BurnManager not configured');
+      throw new Error('BurnManager required for intent submission');
+    }
+
+    // Validate intent data
+    if (!intentData.author || !intentData.prose || intentData.prose.length < 10) {
+      logger.error('Invalid intent data', { author: intentData.author });
+      throw new Error('Invalid intent data: author and prose (min 10 chars) required');
+    }
+
+    // Generate timestamp and intent hash
+    const timestamp = Date.now();
+    const intentHash = generateIntentHash(intentData.prose, intentData.author, timestamp);
+
+    // Preview burn requirement
+    const burnPreview = this.burnManager.calculateFilingBurn(intentData.author);
+
+    logger.info('Submitting intent with burn requirement', {
+      author: intentData.author,
+      intentHash,
+      burnRequired: burnPreview.amount,
+      isFree: burnPreview.isFree,
+    });
+
+    try {
+      // Execute burn (if required)
+      const burnResult = await this.burnManager.executeFilingBurn(
+        intentData.author,
+        intentHash
+      );
+
+      if (!burnPreview.isFree && !burnResult) {
+        logger.error('Burn execution failed', { intentHash });
+        throw new Error('Burn execution failed');
+      }
+
+      // Construct intent object
+      const intent: Intent = {
+        hash: intentHash,
+        author: intentData.author,
+        prose: intentData.prose,
+        desires: intentData.desires || this.extractDesires(intentData.prose),
+        constraints: intentData.constraints || this.extractConstraints(intentData.prose),
+        offeredFee: intentData.offeredFee,
+        timestamp,
+        status: 'pending' as IntentStatus,
+        branch: intentData.branch,
+        flagCount: 0,
+      };
+
+      // Submit to chain
+      const response = await axios.post(
+        `${this.config.chainEndpoint}/api/v1/intents`,
+        {
+          intent,
+          burnTransaction: burnResult,
+        }
+      );
+
+      if (response.status === 200 || response.status === 201) {
+        logger.info('Intent submitted successfully', {
+          hash: intentHash,
+          author: intentData.author,
+          burnAmount: burnPreview.amount,
+        });
+
+        // Cache the intent locally
+        this.intentCache.set(intentHash, intent);
+
+        return intent;
+      }
+
+      logger.error('Intent submission failed', {
+        status: response.status,
+        hash: intentHash,
+      });
+      return null;
+    } catch (error) {
+      logger.error('Error submitting intent', {
+        error,
+        author: intentData.author,
+        intentHash,
+      });
+      throw error;
+    }
   }
 }
