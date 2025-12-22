@@ -83,6 +83,8 @@ export class ConfigLoader {
   /**
    * Get optional environment variable with default
    */
+  private static getOptional(key: string, defaultValue: string): string;
+  private static getOptional(key: string): string | undefined;
   private static getOptional(key: string, defaultValue?: string): string | undefined {
     return process.env[key] || defaultValue;
   }
