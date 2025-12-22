@@ -359,6 +359,14 @@ The NatLangChain Mediator Node has achieved **full implementation** of the MP-01
     - Dynamic validator set updates
     - Slot-based mediation gating in DPoS/hybrid modes
 
+19. **Automated Security Testing** (`src/security/`)
+    - VulnerabilityScanner: Static analysis for 20+ vulnerability patterns
+    - SecurityTestRunner: Orchestrated security test suite
+    - SecurityReportGenerator: Multi-format report generation (Console, JSON, Markdown, HTML)
+    - Coverage for OWASP Top 10 categories
+    - CWE ID mapping for all findings
+    - Prompt injection, path traversal, input validation tests
+
 ### ⚠️ Enhancement Opportunities (Non-Critical)
 
 These features are functional but could be enhanced:

@@ -212,6 +212,7 @@ With all major features now complete, the implementation status is:
 10. **Challenge Proof Submission** - ✅ COMPLETE (ChallengeDetector + ChallengeManager)
 11. **Sybil Resistance** - ✅ COMPLETE (SpamProofDetector + SubmissionTracker)
 12. **DPoS Validator Rotation** - ✅ COMPLETE (ValidatorRotationManager)
+13. **Automated Security Testing** - ✅ COMPLETE (VulnerabilityScanner + SecurityTestRunner + SecurityReportGenerator)
 
 ### Remaining Work
 
@@ -238,6 +239,9 @@ npm test -- --testPathPattern="ValidatorRotationManager"
 
 # Run all consensus tests
 npm test -- --testPathPattern="consensus"
+
+# Run security tests
+npm test -- --testPathPattern="security"
 
 # Run all tests
 npm test
