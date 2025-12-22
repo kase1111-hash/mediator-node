@@ -969,9 +969,9 @@ export interface DelegationScope {
 }
 
 /**
- * Delegation grant
+ * Delegation grant (MP-04)
  */
-export interface Delegation {
+export interface DelegationGrant {
   delegationId: string;
   delegatorId: string; // Human delegating authority
   delegateId: string; // Agent or human receiving authority

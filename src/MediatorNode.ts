@@ -16,6 +16,7 @@ import { SubmissionTracker } from './sybil/SubmissionTracker';
 import { SpamProofDetector } from './sybil/SpamProofDetector';
 import { EffortCaptureSystem } from './effort/EffortCaptureSystem';
 import { DisputeManager } from './dispute/DisputeManager';
+import { LicensingManager } from './licensing/LicensingManager';
 import { logger } from './utils/logger';
 
 /**
@@ -44,6 +45,7 @@ export class MediatorNode {
   private spamProofDetector: SpamProofDetector;
   private effortCaptureSystem?: EffortCaptureSystem;
   private disputeManager?: DisputeManager;
+  private licensingManager?: LicensingManager;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -95,6 +97,11 @@ export class MediatorNode {
     // Initialize Dispute & Escalation system (MP-03)
     if (config.enableDisputeSystem) {
       this.disputeManager = new DisputeManager(config, this.llmProvider);
+    }
+
+    // Initialize Licensing & Delegation system (MP-04)
+    if (config.enableLicensingSystem) {
+      this.licensingManager = new LicensingManager(config);
     }
 
     logger.info('Mediator node created', {
@@ -713,6 +720,7 @@ export class MediatorNode {
       anchoredReceipts: number;
     };
     disputeStats?: ReturnType<DisputeManager['getStats']>;
+    licensingStats?: ReturnType<LicensingManager['getStats']>;
   } {
     const burnStats = this.burnManager.getBurnStats();
     const status: any = {
@@ -776,6 +784,11 @@ export class MediatorNode {
     // Include dispute stats if enabled (MP-03)
     if (this.disputeManager) {
       status.disputeStats = this.disputeManager.getStats();
+    }
+
+    // Include licensing stats if enabled (MP-04)
+    if (this.licensingManager) {
+      status.licensingStats = this.licensingManager.getStats();
     }
 
     return status;
@@ -849,5 +862,12 @@ export class MediatorNode {
    */
   public getDisputeManager(): DisputeManager | undefined {
     return this.disputeManager;
+  }
+
+  /**
+   * Get LicensingManager instance for direct access
+   */
+  public getLicensingManager(): LicensingManager | undefined {
+    return this.licensingManager;
   }
 }

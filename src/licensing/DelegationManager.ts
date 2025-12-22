@@ -1,6 +1,6 @@
 import {
   MediatorConfig,
-  Delegation,
+  DelegationGrant,
   DelegationScope,
   DelegationStatus,
   DelegatedAction,
@@ -70,7 +70,7 @@ export interface DelegationRevocationParams {
  */
 export class DelegationManager {
   private config: MediatorConfig;
-  private delegations: Map<string, Delegation> = new Map();
+  private delegations: Map<string, DelegationGrant> = new Map();
   private actions: Map<string, DelegatedAction> = new Map();
   private dataPath: string;
   private actionsPath: string;
@@ -210,7 +210,7 @@ export class DelegationManager {
         },
       };
 
-      const delegation: Delegation = {
+      const delegation: DelegationGrant = {
         delegationId,
         delegatorId: params.delegatorId,
         delegateId: params.delegateId,
@@ -456,6 +456,7 @@ export class DelegationManager {
         actionType: params.actionType,
         actionDescription: params.actionDescription,
         performedAt: now,
+        referencedGrant: params.referencedGrant,
       });
 
       const action: DelegatedAction = {
@@ -609,7 +610,7 @@ export class DelegationManager {
    * Check if action is within delegation scope
    * Simple keyword matching for demonstration
    */
-  private checkActionScope(delegation: Delegation, actionParams: DelegatedActionParams): boolean {
+  private checkActionScope(delegation: DelegationGrant, actionParams: DelegatedActionParams): boolean {
     const actionText = `${actionParams.actionType} ${actionParams.actionDescription}`.toLowerCase();
 
     // Check if action matches any delegated powers
@@ -636,14 +637,14 @@ export class DelegationManager {
   /**
    * Get delegation by ID
    */
-  public getDelegation(delegationId: string): Delegation | undefined {
+  public getDelegation(delegationId: string): DelegationGrant | undefined {
     return this.delegations.get(delegationId);
   }
 
   /**
    * Get delegations by delegator
    */
-  public getDelegationsByDelegator(delegatorId: string): Delegation[] {
+  public getDelegationsByDelegator(delegatorId: string): DelegationGrant[] {
     return Array.from(this.delegations.values()).filter(
       (delegation) => delegation.delegatorId === delegatorId
     );
@@ -652,7 +653,7 @@ export class DelegationManager {
   /**
    * Get delegations by delegate
    */
-  public getDelegationsByDelegate(delegateId: string): Delegation[] {
+  public getDelegationsByDelegate(delegateId: string): DelegationGrant[] {
     return Array.from(this.delegations.values()).filter(
       (delegation) => delegation.delegateId === delegateId
     );
@@ -661,7 +662,7 @@ export class DelegationManager {
   /**
    * Get delegations by status
    */
-  public getDelegationsByStatus(status: DelegationStatus): Delegation[] {
+  public getDelegationsByStatus(status: DelegationStatus): DelegationGrant[] {
     return Array.from(this.delegations.values()).filter(
       (delegation) => delegation.status === status
     );
@@ -741,7 +742,7 @@ export class DelegationManager {
   /**
    * Calculate SHA-256 hash of delegation contents
    */
-  private calculateDelegationHash(delegation: Delegation): string {
+  private calculateDelegationHash(delegation: DelegationGrant): string {
     const hashContent = {
       delegationId: delegation.delegationId,
       delegatorId: delegation.delegatorId,
@@ -765,7 +766,7 @@ export class DelegationManager {
   /**
    * Save delegation to disk
    */
-  private saveDelegation(delegation: Delegation): void {
+  private saveDelegation(delegation: DelegationGrant): void {
     const filePath = path.join(this.dataPath, `${delegation.delegationId}.json`);
 
     try {
@@ -816,7 +817,7 @@ export class DelegationManager {
         }
 
         const content = fs.readFileSync(filePath, 'utf-8');
-        const delegation: Delegation = JSON.parse(content);
+        const delegation: DelegationGrant = JSON.parse(content);
 
         this.delegations.set(delegation.delegationId, delegation);
       }

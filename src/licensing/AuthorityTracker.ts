@@ -3,7 +3,7 @@ import {
   ScopeViolation,
   ViolationType,
   License,
-  Delegation,
+  DelegationGrant,
   DelegatedAction,
 } from '../types';
 import { nanoid } from 'nanoid';
