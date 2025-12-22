@@ -103,6 +103,13 @@ export class ConfigLoader {
       effortEncryptSignals: this.getOptional('EFFORT_ENCRYPT_SIGNALS') === 'true' || this.getOptional('EFFORT_ENCRYPT_SIGNALS') === undefined,
       effortRetentionDays: this.getOptionalNumber('EFFORT_RETENTION_DAYS'),
 
+      // MP-03: Dispute & Escalation Protocol configuration
+      enableDisputeSystem: this.getOptional('ENABLE_DISPUTE_SYSTEM') === 'true',
+      allowDisputeClarification: this.getOptional('ALLOW_DISPUTE_CLARIFICATION') !== 'false', // Default true
+      autoFreezeEvidence: this.getOptional('AUTO_FREEZE_EVIDENCE') !== 'false', // Default true
+      maxClarificationDays: this.getOptionalNumber('MAX_CLARIFICATION_DAYS'),
+      requireHumanEscalation: this.getOptional('REQUIRE_HUMAN_ESCALATION') !== 'false', // Default true
+
       // Logging
       logLevel: this.getLogLevel(),
     };

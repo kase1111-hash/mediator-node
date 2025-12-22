@@ -249,6 +249,13 @@ export interface MediatorConfig {
   effortEncryptSignals?: boolean; // Encrypt raw signals at rest (default: true)
   effortRetentionDays?: number; // Signal retention period (default: 90, 0 = indefinite)
 
+  // MP-03: Dispute & Escalation Protocol configuration
+  enableDisputeSystem?: boolean; // Enable dispute declaration and handling (default: false)
+  allowDisputeClarification?: boolean; // Allow mediator-assisted clarification (default: true)
+  autoFreezeEvidence?: boolean; // Auto-freeze contested items (default: true)
+  maxClarificationDays?: number; // Max days for clarification phase (default: 14)
+  requireHumanEscalation?: boolean; // Require human authorship for escalations (default: true)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -675,4 +682,193 @@ export interface EffortCaptureConfig {
   autoAnchor: boolean; // Automatically anchor receipts
   encryptSignals: boolean; // Encrypt raw signals at rest
   retentionDays?: number; // How long to keep raw signals (0 = indefinite)
+}
+
+// ============================================================================
+// MP-03: Dispute & Escalation Protocol Types
+// ============================================================================
+
+/**
+ * Dispute status
+ */
+export type DisputeStatus = 'initiated' | 'under_review' | 'clarifying' | 'escalated' | 'resolved' | 'dismissed';
+
+/**
+ * Dispute party role
+ */
+export type DisputePartyRole = 'claimant' | 'respondent';
+
+/**
+ * Dispute party
+ */
+export interface DisputeParty {
+  partyId: string; // Public key or identifier
+  role: DisputePartyRole;
+  name?: string;
+  contactInfo?: string;
+}
+
+/**
+ * Contested item reference
+ */
+export interface ContestedItem {
+  itemType: 'intent' | 'settlement' | 'receipt' | 'agreement' | 'delegation';
+  itemId: string; // Hash or ID of the contested item
+  itemHash?: string; // Hash of the item for verification
+}
+
+/**
+ * Dispute evidence
+ */
+export interface DisputeEvidence {
+  evidenceId: string;
+  disputeId: string;
+  submittedBy: string; // Party ID
+  timestamp: number;
+  evidenceType: 'document' | 'statement' | 'witness' | 'artifact' | 'other';
+  description: string;
+  contentHash?: string; // Hash of evidence content
+  linkedItems?: string[]; // References to other items
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Dispute declaration
+ */
+export interface DisputeDeclaration {
+  disputeId: string;
+  claimant: DisputeParty;
+  respondent?: DisputeParty; // May not be known at declaration time
+  contestedItems: ContestedItem[];
+  issueDescription: string; // Natural language description
+  desiredEscalationPath?: string; // e.g., "arbitration", "DAO", "court"
+  status: DisputeStatus;
+  initiatedAt: number;
+  updatedAt: number;
+  evidence: DisputeEvidence[];
+  clarificationRecord?: ClarificationRecord;
+  escalation?: EscalationDeclaration;
+  resolution?: DisputeResolution;
+}
+
+/**
+ * Clarification record from mediator-assisted phase
+ */
+export interface ClarificationRecord {
+  clarificationId: string;
+  disputeId: string;
+  mediatorId: string; // LLM model identifier
+  startedAt: number;
+  completedAt?: number;
+  claimantStatements: string[]; // Structured claims
+  respondentStatements: string[]; // Structured counterclaims
+  factualDisagreements: string[]; // Points of factual disagreement
+  interpretiveDisagreements: string[]; // Points of interpretive disagreement
+  scopeNarrowing?: string; // Suggested narrowed scope
+  ambiguities: string[]; // Identified ambiguities
+  participationConsent: {
+    claimant: boolean;
+    respondent: boolean;
+  };
+}
+
+/**
+ * Escalation authority types
+ */
+export type EscalationAuthorityType = 'arbitrator' | 'dao' | 'court' | 'review_board' | 'custom';
+
+/**
+ * Escalation authority
+ */
+export interface EscalationAuthority {
+  authorityId: string;
+  authorityType: EscalationAuthorityType;
+  name: string;
+  description?: string;
+  contactInfo?: string;
+  jurisdiction?: string;
+  website?: string;
+}
+
+/**
+ * Escalation declaration
+ */
+export interface EscalationDeclaration {
+  escalationId: string;
+  disputeId: string;
+  escalatedBy: string; // Party ID
+  targetAuthority: EscalationAuthority;
+  scopeOfIssues: string[]; // Specific issues being escalated
+  escalatedAt: number;
+  humanAuthorship: boolean; // Must be true
+  signature?: string; // Cryptographic signature
+  packageId?: string; // Reference to dispute package
+}
+
+/**
+ * Dispute package (bundled records for escalation)
+ */
+export interface DisputePackage {
+  packageId: string;
+  disputeId: string;
+  createdAt: number;
+  createdBy: string;
+  summary: string; // Human-readable summary
+  timeline: DisputeTimelineEntry[];
+  bundledRecords: {
+    intents: Intent[];
+    settlements: ProposedSettlement[];
+    receipts: EffortReceipt[];
+    evidence: DisputeEvidence[];
+    clarifications: ClarificationRecord[];
+  };
+  packageHash: string; // SHA-256 of package contents
+  completenessVerified: boolean;
+  exportFormats?: {
+    json?: string; // JSON export path
+    pdf?: string; // PDF export path
+    zip?: string; // ZIP archive path
+  };
+}
+
+/**
+ * Dispute timeline entry
+ */
+export interface DisputeTimelineEntry {
+  timestamp: number;
+  eventType: 'initiated' | 'evidence_added' | 'clarification_started' | 'clarification_completed' | 'escalated' | 'resolved';
+  actor: string;
+  description: string;
+  referenceId?: string;
+}
+
+/**
+ * Dispute resolution (external judgment recording)
+ */
+export interface DisputeResolution {
+  resolutionId: string;
+  disputeId: string;
+  resolvedAt: number;
+  resolvedBy: string; // Authority or party
+  outcome: 'claimant_favored' | 'respondent_favored' | 'compromise' | 'dismissed' | 'other';
+  outcomeDescription: string;
+  externalReferences?: string[]; // Links to legal documents, rulings, etc.
+  reputationImpact?: {
+    claimant: number;
+    respondent: number;
+  };
+  annotations?: string[];
+  isImmutable: boolean; // Must be true once recorded
+}
+
+/**
+ * Dispute configuration
+ */
+export interface DisputeConfig {
+  enableDisputeSystem: boolean;
+  allowClarification: boolean;
+  autoFreezeEvidence: boolean; // Automatically mark items as UNDER_DISPUTE
+  escalationAuthorities: EscalationAuthority[];
+  maxClarificationDays?: number; // Time limit for clarification phase
+  requireHumanEscalation: boolean; // Require human authorship for escalation
 }
