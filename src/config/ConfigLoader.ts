@@ -54,6 +54,27 @@ export class ConfigLoader {
       // Acceptance window
       acceptanceWindowHours: parseInt(this.getOptional('ACCEPTANCE_WINDOW_HOURS', '72')),
 
+      // Burn configuration (MP-06)
+      baseFilingBurn: this.getOptionalNumber('BASE_FILING_BURN'),
+      freeDailySubmissions: this.getOptionalNumber('FREE_DAILY_SUBMISSIONS'),
+      burnEscalationBase: this.getOptionalNumber('BURN_ESCALATION_BASE'),
+      burnEscalationExponent: this.getOptionalNumber('BURN_ESCALATION_EXPONENT'),
+      successBurnPercentage: this.getOptionalNumber('SUCCESS_BURN_PERCENTAGE'),
+      loadScalingEnabled: this.getOptional('LOAD_SCALING_ENABLED') === 'true',
+      maxLoadMultiplier: this.getOptionalNumber('MAX_LOAD_MULTIPLIER'),
+      enableBurnPreview: this.getOptional('ENABLE_BURN_PREVIEW', 'true') === 'true',
+
+      // LoadMonitor configuration
+      targetIntentRate: this.getOptionalNumber('TARGET_INTENT_RATE'),
+      maxIntentRate: this.getOptionalNumber('MAX_INTENT_RATE'),
+      loadSmoothingFactor: this.getOptionalNumber('LOAD_SMOOTHING_FACTOR'),
+      loadMonitoringInterval: this.getOptionalNumber('LOAD_MONITORING_INTERVAL'),
+
+      // Challenge submission configuration
+      enableChallengeSubmission: this.getOptional('ENABLE_CHALLENGE_SUBMISSION') === 'true',
+      minConfidenceToChallenge: this.getOptionalNumber('MIN_CONFIDENCE_TO_CHALLENGE'),
+      challengeCheckInterval: this.getOptionalNumber('CHALLENGE_CHECK_INTERVAL'),
+
       // Logging
       logLevel: this.getLogLevel(),
     };

@@ -210,6 +210,11 @@ export interface MediatorConfig {
   loadSmoothingFactor?: number; // Smoothing for gradual adjustments 0-1 (default: 0.3)
   loadMonitoringInterval?: number; // Load check interval in ms (default: 30000)
 
+  // Challenge submission configuration
+  enableChallengeSubmission?: boolean; // Enable automatic challenge submission (default: false)
+  minConfidenceToChallenge?: number; // Minimum confidence to submit challenge 0-1 (default: 0.8)
+  challengeCheckInterval?: number; // How often to check for challengeable settlements in ms (default: 60000)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -356,4 +361,44 @@ export interface BurnForecast {
   projectedAmount: number;
   confidence: number; // 0-1
   basedOnDataPoints: number;
+}
+
+/**
+ * Challenge Detection and Submission Types
+ */
+
+/**
+ * Result of analyzing a settlement for semantic contradictions
+ */
+export interface ContradictionAnalysis {
+  hasContradiction: boolean;
+  confidence: number; // 0-1, how confident we are in the contradiction
+  violatedConstraints: string[]; // Which constraints from original intents were violated
+  contradictionProof: string; // Natural language explanation of the contradiction
+  paraphraseEvidence: string; // LLM-generated paraphrase showing the violation
+  affectedParty: 'A' | 'B' | 'both'; // Which party's intent was violated
+  severity: 'minor' | 'moderate' | 'severe'; // How severe the violation is
+}
+
+/**
+ * Result of submitting a challenge to the chain
+ */
+export interface ChallengeSubmissionResult {
+  success: boolean;
+  challengeId?: string;
+  error?: string;
+  timestamp: number;
+}
+
+/**
+ * Tracking record for challenges submitted by this mediator
+ */
+export interface ChallengeHistory {
+  challengeId: string;
+  settlementId: string;
+  targetMediatorId: string;
+  submittedAt: number;
+  status: 'pending' | 'upheld' | 'rejected';
+  contradictionAnalysis: ContradictionAnalysis;
+  lastChecked: number;
 }
