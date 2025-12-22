@@ -6,6 +6,7 @@ import {
   DisputeEvidence,
   DisputeStatus,
   DisputeTimelineEntry,
+  EscalationAuthorityType,
 } from '../types';
 import { LLMProvider } from '../llm/LLMProvider';
 import { nanoid } from 'nanoid';
@@ -15,6 +16,7 @@ import axios from 'axios';
 import { logger } from '../utils/logger';
 import { EvidenceManager } from './EvidenceManager';
 import { ClarificationManager } from './ClarificationManager';
+import { EscalationManager } from './EscalationManager';
 
 /**
  * Manages dispute declarations and lifecycle
@@ -26,6 +28,7 @@ export class DisputeManager {
   private dataPath: string;
   private evidenceManager: EvidenceManager;
   private clarificationManager?: ClarificationManager;
+  private escalationManager: EscalationManager;
   private llmProvider?: LLMProvider;
 
   constructor(
@@ -33,7 +36,8 @@ export class DisputeManager {
     llmProvider?: LLMProvider,
     dataPath: string = './data/disputes',
     evidenceDataPath?: string,
-    clarificationDataPath?: string
+    clarificationDataPath?: string,
+    escalationDataPath?: string
   ) {
     this.config = config;
     this.llmProvider = llmProvider;
@@ -55,6 +59,11 @@ export class DisputeManager {
         (dataPath.includes('test-data') ? dataPath.replace('disputes', 'clarifications') : undefined);
       this.clarificationManager = new ClarificationManager(config, llmProvider, clarificationPath);
     }
+
+    // Initialize escalation manager
+    const escalationPath = escalationDataPath ||
+      (dataPath.includes('test-data') ? dataPath.replace('disputes', 'escalations') : undefined);
+    this.escalationManager = new EscalationManager(config, escalationPath);
 
     // Load existing disputes
     this.loadDisputes();
@@ -721,6 +730,96 @@ No automated judgment is rendered by this system.
   }
 
   /**
+   * Register an escalation authority
+   */
+  public registerEscalationAuthority(params: {
+    authorityType: EscalationAuthorityType;
+    name: string;
+    description?: string;
+    contactInfo?: string;
+    jurisdiction?: string;
+    website?: string;
+  }): { success: boolean; authorityId?: string; error?: string } {
+    return this.escalationManager.registerAuthority(params);
+  }
+
+  /**
+   * Initiate an escalation for a dispute
+   */
+  public async initiateEscalation(params: {
+    disputeId: string;
+    escalatedBy: string;
+    targetAuthorityId: string;
+    scopeOfIssues: string[];
+    signature?: string;
+    packageId?: string;
+  }): Promise<{
+    success: boolean;
+    escalationId?: string;
+    error?: string;
+  }> {
+    const dispute = this.disputes.get(params.disputeId);
+
+    if (!dispute) {
+      return {
+        success: false,
+        error: 'Dispute not found',
+      };
+    }
+
+    const result = await this.escalationManager.initiateEscalation(params);
+
+    if (result.success) {
+      // Update dispute status to escalated
+      this.updateDisputeStatus(params.disputeId, 'escalated');
+
+      // Store escalation reference in dispute
+      const escalation = this.escalationManager.getEscalation(result.escalationId!);
+      if (escalation) {
+        dispute.escalation = escalation;
+        this.saveDispute(dispute);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Submit an escalation to its target authority
+   */
+  public async submitEscalation(escalationId: string) {
+    return this.escalationManager.submitEscalation(escalationId);
+  }
+
+  /**
+   * Get all escalations for a dispute
+   */
+  public getEscalationsForDispute(disputeId: string) {
+    return this.escalationManager.getEscalationsForDispute(disputeId);
+  }
+
+  /**
+   * Get all registered escalation authorities
+   */
+  public getAllEscalationAuthorities() {
+    return this.escalationManager.getAllAuthorities();
+  }
+
+  /**
+   * Get escalation authorities by type
+   */
+  public getEscalationAuthoritiesByType(type: EscalationAuthorityType) {
+    return this.escalationManager.getAuthoritiesByType(type);
+  }
+
+  /**
+   * Get escalation manager (for testing/advanced usage)
+   */
+  public getEscalationManager(): EscalationManager {
+    return this.escalationManager;
+  }
+
+  /**
    * Get statistics
    */
   public getStats(): {
@@ -730,6 +829,7 @@ No automated judgment is rendered by this system.
     averageEvidencePerDispute: number;
     evidenceStats?: ReturnType<EvidenceManager['getStats']>;
     clarificationStats?: ReturnType<ClarificationManager['getStats']>;
+    escalationStats?: ReturnType<EscalationManager['getStats']>;
   } {
     const disputesByStatus: Record<DisputeStatus, number> = {
       initiated: 0,
@@ -757,6 +857,7 @@ No automated judgment is rendered by this system.
           : 0,
       evidenceStats: this.evidenceManager.getStats(),
       clarificationStats: this.clarificationManager?.getStats(),
+      escalationStats: this.escalationManager.getStats(),
     };
   }
 }
