@@ -288,6 +288,13 @@ export interface MediatorConfig {
   minEffectiveStake?: number;
   poaAuthorityKey?: string;
 
+  // Network coordination
+  httpEndpoint?: string;
+  port?: number;
+  coordinationEndpoints?: string[];
+  additionalChains?: any[];
+  webSocketEndpoint?: string;
+
   vectorDbPath: string;
   vectorDimensions: number;
   maxIntentsCache: number;
@@ -405,6 +412,7 @@ export interface AlignmentCandidate {
   similarityScore: number;
   estimatedValue: number;
   priority: number;
+  reason?: string; // Optional explanation for the match
 }
 
 /**
