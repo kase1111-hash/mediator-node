@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { BurnTransaction, BurnType, MediatorConfig, UserSubmissionRecord } from '../types';
 import { logger } from '../utils/logger';
+import { BurnAnalytics } from './BurnAnalytics';
 
 /**
  * BurnManager handles all burn-related operations including:
@@ -430,5 +431,12 @@ export class BurnManager {
       logger.info('Cleaned up old submission records', { removed });
       this.persistSubmissionData();
     }
+  }
+
+  /**
+   * Get BurnAnalytics instance for analytics and reporting
+   */
+  public getBurnAnalytics(): BurnAnalytics {
+    return new BurnAnalytics(this.burnHistory, this.userSubmissions);
   }
 }

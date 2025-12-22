@@ -362,4 +362,18 @@ export class MediatorNode {
   public getSettlementManager(): SettlementManager {
     return this.settlementManager;
   }
+
+  /**
+   * Get BurnAnalytics instance for analytics and reporting
+   */
+  public getBurnAnalytics() {
+    const analytics = this.burnManager.getBurnAnalytics();
+
+    // Record current load multiplier for load metrics
+    if (this.config.loadScalingEnabled) {
+      analytics.recordLoadMultiplier(this.burnManager.getLoadMultiplier());
+    }
+
+    return analytics;
+  }
 }
