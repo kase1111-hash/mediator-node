@@ -6,6 +6,7 @@ import { SettlementManager } from './settlement/SettlementManager';
 import { ReputationTracker } from './reputation/ReputationTracker';
 import { StakeManager } from './consensus/StakeManager';
 import { AuthorityManager } from './consensus/AuthorityManager';
+import { BurnManager } from './burn/BurnManager';
 import { logger } from './utils/logger';
 
 /**
@@ -25,6 +26,7 @@ export class MediatorNode {
   private reputationTracker: ReputationTracker;
   private stakeManager: StakeManager;
   private authorityManager: AuthorityManager;
+  private burnManager: BurnManager;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -41,6 +43,7 @@ export class MediatorNode {
     this.reputationTracker = new ReputationTracker(config);
     this.stakeManager = new StakeManager(config);
     this.authorityManager = new AuthorityManager(config);
+    this.burnManager = new BurnManager(config);
 
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
@@ -275,13 +278,31 @@ export class MediatorNode {
     activeSettlements: number;
     reputation: number;
     effectiveStake: number;
+    burnStats: {
+      totalBurns: number;
+      totalAmount: number;
+      loadMultiplier: number;
+    };
   } {
+    const burnStats = this.burnManager.getBurnStats();
     return {
       isRunning: this.isRunning,
       cachedIntents: this.ingester.getCachedIntents().length,
       activeSettlements: this.settlementManager.getActiveSettlements().length,
       reputation: this.reputationTracker.getWeight(),
       effectiveStake: this.stakeManager.getEffectiveStake(),
+      burnStats: {
+        totalBurns: burnStats.totalBurns,
+        totalAmount: burnStats.totalAmount,
+        loadMultiplier: this.burnManager.getLoadMultiplier(),
+      },
     };
+  }
+
+  /**
+   * Get BurnManager instance for direct access
+   */
+  public getBurnManager(): BurnManager {
+    return this.burnManager;
   }
 }
