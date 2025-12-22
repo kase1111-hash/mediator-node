@@ -256,6 +256,14 @@ export interface MediatorConfig {
   maxClarificationDays?: number; // Max days for clarification phase (default: 14)
   requireHumanEscalation?: boolean; // Require human authorship for escalations (default: true)
 
+  // MP-04: Licensing & Delegation Protocol configuration
+  enableLicensingSystem?: boolean; // Enable licensing and delegation (default: false)
+  requireHumanRatification?: boolean; // Require human authorship for ratification (default: true)
+  defaultLicenseDuration?: number; // Default license duration in days (default: 365)
+  maxDelegationDepth?: number; // Maximum redelegation depth (default: 3)
+  autoExpireCheck?: boolean; // Auto-check and expire licenses/delegations (default: true)
+  enableViolationTracking?: boolean; // Track scope violations (default: true)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -871,4 +879,164 @@ export interface DisputeConfig {
   escalationAuthorities: EscalationAuthority[];
   maxClarificationDays?: number; // Time limit for clarification phase
   requireHumanEscalation: boolean; // Require human authorship for escalation
+}
+
+// ============================================================================
+// MP-04: Licensing & Delegation Protocol Types
+// ============================================================================
+
+/**
+ * License status
+ */
+export type LicenseStatus = 'proposed' | 'ratified' | 'active' | 'expired' | 'revoked';
+
+/**
+ * Subject type for licensing
+ */
+export type SubjectType = 'receipt' | 'artifact' | 'agreement' | 'settlement' | 'intent' | 'other';
+
+/**
+ * License scope definition
+ */
+export interface LicenseScope {
+  subject: {
+    type: SubjectType;
+    ids: string[]; // Receipt IDs, artifact IDs, agreement IDs, etc.
+  };
+  purpose: string; // Allowed use cases (natural language)
+  limits: string[]; // Prohibited actions
+  duration: {
+    type: 'perpetual' | 'time_bounded';
+    expiresAt?: number; // Timestamp for time_bounded
+  };
+  transferability: {
+    sublicenseAllowed: boolean;
+    redelegationAllowed: boolean;
+  };
+}
+
+/**
+ * License grant
+ */
+export interface License {
+  licenseId: string;
+  grantorId: string; // Human or institution issuing license
+  granteeId: string; // Recipient of license
+  scope: LicenseScope;
+  status: LicenseStatus;
+
+  // Lifecycle
+  proposedAt: number;
+  proposedBy: string; // May differ from grantor (counterparty/mediator can propose)
+  ratifiedAt?: number;
+  ratificationStatement?: string; // Natural language ratification by grantor
+  activatedAt?: number;
+
+  // Revocation
+  revokedAt?: number;
+  revocationStatement?: string;
+  revocationSignature?: string;
+
+  // Immutable references
+  underlyingReferences: string[]; // Hashes of receipts, agreements, etc.
+  licenseHash: string; // SHA-256 of license contents
+
+  // Metadata
+  humanAuthorship: boolean; // Must be true for ratification
+  signature?: string;
+}
+
+/**
+ * Delegation status
+ */
+export type DelegationStatus = 'proposed' | 'ratified' | 'active' | 'expired' | 'revoked';
+
+/**
+ * Delegation scope definition
+ */
+export interface DelegationScope {
+  delegatedPowers: string[]; // Specific powers granted (natural language)
+  constraints: string[]; // Limitations on delegated powers
+  revocationConditions: string[]; // Conditions triggering auto-revocation
+  duration: {
+    type: 'perpetual' | 'time_bounded';
+    expiresAt?: number;
+  };
+  transferability: {
+    redelegationAllowed: boolean;
+    maxRedelegationDepth?: number; // Maximum chain depth
+  };
+}
+
+/**
+ * Delegation grant
+ */
+export interface Delegation {
+  delegationId: string;
+  delegatorId: string; // Human delegating authority
+  delegateId: string; // Agent or human receiving authority
+  scope: DelegationScope;
+  status: DelegationStatus;
+
+  // Lifecycle
+  proposedAt: number;
+  proposedBy: string;
+  ratifiedAt?: number;
+  ratificationStatement?: string; // Natural language ratification
+  activatedAt?: number;
+
+  // Revocation
+  revokedAt?: number;
+  revocationStatement?: string;
+  revocationSignature?: string;
+
+  // Redelegation chain
+  parentDelegationId?: string; // If this is a redelegation
+  redelegationDepth: number; // 0 = original delegation
+
+  // Metadata
+  humanAuthorship: boolean; // Must be true for ratification
+  signature?: string;
+  delegationHash: string; // SHA-256 of delegation contents
+}
+
+/**
+ * Violation type
+ */
+export type ViolationType =
+  | 'license_scope_violation'
+  | 'unauthorized_redelegation'
+  | 'purpose_violation'
+  | 'expired_authority'
+  | 'revoked_authority';
+
+/**
+ * Scope violation record
+ */
+export interface ScopeViolation {
+  violationId: string;
+  type: ViolationType;
+  licenseId?: string;
+  delegationId?: string;
+  violatorId: string;
+  violationDescription: string;
+  detectedAt: number;
+  evidence?: string[]; // References to proof of violation
+  disputeId?: string; // If escalated to MP-03
+}
+
+/**
+ * Delegated action record
+ */
+export interface DelegatedAction {
+  actionId: string;
+  delegationId: string;
+  delegateId: string;
+  actionType: string; // e.g., "negotiation", "settlement_proposal", "license_grant"
+  actionDescription: string;
+  performedAt: number;
+  withinScope: boolean; // Whether action was within delegation scope
+  referencedGrant: string; // Must reference the delegation grant
+  actionHash: string; // SHA-256 of action contents
+  violationId?: string; // If action violated scope
 }
