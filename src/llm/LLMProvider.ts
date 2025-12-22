@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import { MediatorConfig, Intent, NegotiationResult } from '../types';
 import { logger } from '../utils/logger';
 import { generateModelIntegrityHash } from '../utils/crypto';
+import { sanitizeIntentForLLM, buildStructuredPrompt } from '../utils/prompt-security';
 
 /**
  * LLMProvider handles interactions with language models for
@@ -148,49 +149,67 @@ export class LLMProvider {
   }
 
   /**
-   * Build the negotiation prompt
+   * Build the negotiation prompt with security sanitization
    */
   private buildNegotiationPrompt(intentA: Intent, intentB: Intent): string {
-    return `You are a neutral mediator on the NatLangChain protocol. Your task is to determine if two intents can be aligned and propose settlement terms if viable.
+    // Sanitize user-controlled inputs to prevent prompt injection
+    const sanitizedA = sanitizeIntentForLLM(intentA);
+    const sanitizedB = sanitizeIntentForLLM(intentB);
 
-**Intent A** (${intentA.hash}):
-Author: ${intentA.author}
+    // Log warnings if injection attempts detected
+    if (sanitizedA.warnings) {
+      logger.warn('Prompt injection detected in Intent A', {
+        intentHash: intentA.hash,
+        warnings: sanitizedA.warnings,
+      });
+    }
+    if (sanitizedB.warnings) {
+      logger.warn('Prompt injection detected in Intent B', {
+        intentHash: intentB.hash,
+        warnings: sanitizedB.warnings,
+      });
+    }
+
+    // Use structured prompt with clear delimiters to prevent injection
+    return buildStructuredPrompt({
+      system: `You are a neutral mediator on the NatLangChain protocol. Your task is to determine if two intents can be aligned and propose settlement terms if viable.`,
+
+      intent_a: `ID: ${intentA.hash}
+Author: ${sanitizedA.author}
 Branch: ${intentA.branch || 'Unknown'}
-Prose: ${intentA.prose}
-Desires: ${intentA.desires.join(', ')}
-Constraints: ${intentA.constraints.join(', ')}
-Offered Fee: ${intentA.offeredFee || 'None'}
+Prose: ${sanitizedA.prose}
+Desires: ${sanitizedA.desires.join(', ')}
+Constraints: ${sanitizedA.constraints.join(', ')}
+Offered Fee: ${intentA.offeredFee || 'None'}`,
 
-**Intent B** (${intentB.hash}):
-Author: ${intentB.author}
+      intent_b: `ID: ${intentB.hash}
+Author: ${sanitizedB.author}
 Branch: ${intentB.branch || 'Unknown'}
-Prose: ${intentB.prose}
-Desires: ${intentB.desires.join(', ')}
-Constraints: ${intentB.constraints.join(', ')}
-Offered Fee: ${intentB.offeredFee || 'None'}
+Prose: ${sanitizedB.prose}
+Desires: ${sanitizedB.desires.join(', ')}
+Constraints: ${sanitizedB.constraints.join(', ')}
+Offered Fee: ${intentB.offeredFee || 'None'}`,
 
-**Your Task:**
-1. Analyze if these intents have semantic alignment (do they complement each other?)
+      task: `1. Analyze if these intents have semantic alignment (do they complement each other?)
 2. Verify that any proposed settlement respects BOTH parties' explicit constraints
 3. If alignment exists, propose specific terms (price, deliverables, timeline)
-4. Provide a confidence score (0-100)
+4. Provide a confidence score (0-100)`,
 
-**Output Format:**
-SUCCESS: [yes/no]
+      output_format: `SUCCESS: [yes/no]
 CONFIDENCE: [0-100]
 REASONING: [Your explanation of why these intents align or don't align]
 PROPOSED_TERMS: {
   "price": [number or null],
   "deliverables": [array of strings or null],
   "timeline": [string or null]
-}
+}`,
 
-**Principles:**
-- Intent over form: Look for meaning, not exact matches
+      principles: `- Intent over form: Look for meaning, not exact matches
 - Radical neutrality: Only mediate what is explicitly stated
 - Refuse shadow: If either intent is vague or unclear, mark SUCCESS as no
 
-Provide your analysis now:`;
+Provide your analysis now:`,
+    });
   }
 
   /**
