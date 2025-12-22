@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { MediatorConfig, AlignmentCandidate, ProposedSettlement } from './types';
 import { IntentIngester } from './ingestion/IntentIngester';
 import { VectorDatabase } from './mapping/VectorDatabase';
@@ -8,6 +9,8 @@ import { StakeManager } from './consensus/StakeManager';
 import { AuthorityManager } from './consensus/AuthorityManager';
 import { BurnManager } from './burn/BurnManager';
 import { LoadMonitor } from './burn/LoadMonitor';
+import { ChallengeDetector } from './challenge/ChallengeDetector';
+import { ChallengeManager } from './challenge/ChallengeManager';
 import { logger } from './utils/logger';
 
 /**
@@ -29,6 +32,8 @@ export class MediatorNode {
   private authorityManager: AuthorityManager;
   private burnManager: BurnManager;
   private loadMonitor: LoadMonitor;
+  private challengeDetector: ChallengeDetector;
+  private challengeManager: ChallengeManager;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -52,9 +57,14 @@ export class MediatorNode {
     this.stakeManager = new StakeManager(config);
     this.authorityManager = new AuthorityManager(config);
 
+    // Initialize challenge system
+    this.challengeDetector = new ChallengeDetector(config, this.llmProvider);
+    this.challengeManager = new ChallengeManager(config, this.reputationTracker);
+
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
       consensusMode: config.consensusMode,
+      challengeSubmissionEnabled: config.enableChallengeSubmission || false,
     });
   }
 
@@ -106,6 +116,11 @@ export class MediatorNode {
       // Start settlement monitoring
       this.startSettlementMonitoring();
 
+      // Start challenge monitoring if enabled
+      if (this.config.enableChallengeSubmission) {
+        this.startChallengeMonitoring();
+      }
+
       // Start load monitoring if enabled
       if (this.config.loadScalingEnabled) {
         const interval = this.config.loadMonitoringInterval || 30000;
@@ -116,6 +131,7 @@ export class MediatorNode {
         reputation: this.reputationTracker.getWeight(),
         effectiveStake: this.stakeManager.getEffectiveStake(),
         loadScaling: this.config.loadScalingEnabled || false,
+        challengeSubmission: this.config.enableChallengeSubmission || false,
       });
     } catch (error) {
       logger.error('Error starting mediator node', { error });
@@ -270,6 +286,119 @@ export class MediatorNode {
   }
 
   /**
+   * Start challenge monitoring
+   * Monitors submitted challenges for status updates and updates reputation accordingly
+   */
+  private startChallengeMonitoring(): void {
+    // Monitor our submitted challenges for status updates
+    setInterval(async () => {
+      if (!this.isRunning) return;
+
+      await this.challengeManager.monitorChallenges();
+    }, 60000); // Check every minute
+
+    // Scan for challengeable settlements from other mediators
+    const checkInterval = this.config.challengeCheckInterval || 60000;
+    setInterval(async () => {
+      if (!this.isRunning) return;
+
+      await this.scanForChallengeableSettlements();
+    }, checkInterval);
+  }
+
+  /**
+   * Scan for settlements from other mediators that may contain contradictions
+   */
+  private async scanForChallengeableSettlements(): Promise<void> {
+    try {
+      // Fetch recent settlements from the chain (not created by us)
+      const response = await axios.get(
+        `${this.config.chainEndpoint}/api/v1/settlements/recent?limit=20`
+      );
+
+      if (!response.data || !Array.isArray(response.data.settlements)) {
+        return;
+      }
+
+      const settlements = response.data.settlements.filter(
+        (settlement: ProposedSettlement) =>
+          settlement.mediatorId !== this.config.mediatorPublicKey &&
+          settlement.status === 'proposed'
+      );
+
+      logger.debug('Scanning settlements for contradictions', {
+        count: settlements.length,
+      });
+
+      for (const settlement of settlements) {
+        // Check if we've already challenged this settlement
+        const existingChallenges =
+          this.challengeManager.getChallengesForSettlement(settlement.id);
+
+        if (existingChallenges.length > 0) {
+          continue; // Already challenged
+        }
+
+        // Fetch the original intents
+        const [intentAResponse, intentBResponse] = await Promise.all([
+          axios.get(
+            `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashA}`
+          ),
+          axios.get(
+            `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashB}`
+          ),
+        ]);
+
+        if (!intentAResponse.data || !intentBResponse.data) {
+          continue;
+        }
+
+        const intentA = intentAResponse.data;
+        const intentB = intentBResponse.data;
+
+        // Analyze for contradictions
+        const analysis = await this.challengeDetector.analyzeSettlement(
+          settlement,
+          intentA,
+          intentB
+        );
+
+        if (!analysis) {
+          continue;
+        }
+
+        // Check if we should submit a challenge
+        if (this.challengeDetector.shouldChallenge(analysis)) {
+          logger.info('Detected contradiction, submitting challenge', {
+            settlementId: settlement.id,
+            confidence: analysis.confidence,
+            severity: analysis.severity,
+          });
+
+          const result = await this.challengeManager.submitChallenge(
+            settlement,
+            analysis
+          );
+
+          if (result.success) {
+            logger.info('Challenge submitted successfully', {
+              challengeId: result.challengeId,
+              settlementId: settlement.id,
+            });
+          } else {
+            logger.warn('Failed to submit challenge', {
+              settlementId: settlement.id,
+              error: result.error,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Error scanning for challengeable settlements', { error });
+    }
+  }
+
+  /**
    * Cleanup old embeddings from cache
    */
   private cleanupEmbeddingCache(): void {
@@ -305,6 +434,13 @@ export class MediatorNode {
       currentMultiplier: number;
       loadFactor: number;
     };
+    challengeStats?: {
+      total: number;
+      pending: number;
+      upheld: number;
+      rejected: number;
+      successRate: number;
+    };
   } {
     const burnStats = this.burnManager.getBurnStats();
     const status: any = {
@@ -330,6 +466,11 @@ export class MediatorNode {
         currentMultiplier: loadStats.currentMultiplier,
         loadFactor: loadStats.loadFactor,
       };
+    }
+
+    // Include challenge stats if submission is enabled
+    if (this.config.enableChallengeSubmission) {
+      status.challengeStats = this.challengeManager.getChallengeStats();
     }
 
     return status;
@@ -375,5 +516,19 @@ export class MediatorNode {
     }
 
     return analytics;
+  }
+
+  /**
+   * Get ChallengeDetector instance for direct access
+   */
+  public getChallengeDetector(): ChallengeDetector {
+    return this.challengeDetector;
+  }
+
+  /**
+   * Get ChallengeManager instance for direct access
+   */
+  public getChallengeManager(): ChallengeManager {
+    return this.challengeManager;
   }
 }
