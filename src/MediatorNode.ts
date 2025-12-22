@@ -12,6 +12,8 @@ import { LoadMonitor } from './burn/LoadMonitor';
 import { ChallengeDetector } from './challenge/ChallengeDetector';
 import { ChallengeManager } from './challenge/ChallengeManager';
 import { SemanticConsensusManager } from './consensus/SemanticConsensusManager';
+import { SubmissionTracker } from './sybil/SubmissionTracker';
+import { SpamProofDetector } from './sybil/SpamProofDetector';
 import { logger } from './utils/logger';
 
 /**
@@ -36,6 +38,8 @@ export class MediatorNode {
   private challengeDetector: ChallengeDetector;
   private challengeManager: ChallengeManager;
   private semanticConsensusManager: SemanticConsensusManager;
+  private submissionTracker: SubmissionTracker;
+  private spamProofDetector: SpamProofDetector;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -75,11 +79,16 @@ export class MediatorNode {
     this.challengeDetector = new ChallengeDetector(config, this.llmProvider);
     this.challengeManager = new ChallengeManager(config, this.reputationTracker);
 
+    // Initialize Sybil Resistance system
+    this.submissionTracker = new SubmissionTracker(config);
+    this.spamProofDetector = new SpamProofDetector(config, this.llmProvider);
+
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
       consensusMode: config.consensusMode,
       challengeSubmissionEnabled: config.enableChallengeSubmission || false,
       semanticConsensusEnabled: config.enableSemanticConsensus || false,
+      sybilResistanceEnabled: config.enableSybilResistance || false,
     });
   }
 
@@ -141,6 +150,11 @@ export class MediatorNode {
         this.startSemanticConsensusMonitoring();
       }
 
+      // Start Sybil Resistance monitoring if enabled
+      if (this.config.enableSybilResistance || this.config.enableSpamProofSubmission) {
+        this.startSybilResistanceMonitoring();
+      }
+
       // Start load monitoring if enabled
       if (this.config.loadScalingEnabled) {
         const interval = this.config.loadMonitoringInterval || 30000;
@@ -153,6 +167,8 @@ export class MediatorNode {
         loadScaling: this.config.loadScalingEnabled || false,
         challengeSubmission: this.config.enableChallengeSubmission || false,
         semanticConsensus: this.config.enableSemanticConsensus || false,
+        sybilResistance: this.config.enableSybilResistance || false,
+        spamProofSubmission: this.config.enableSpamProofSubmission || false,
       });
     } catch (error) {
       logger.error('Error starting mediator node', { error });
@@ -510,6 +526,91 @@ export class MediatorNode {
   }
 
   /**
+   * Start Sybil Resistance monitoring
+   * Processes refunds and monitors spam proofs
+   */
+  private startSybilResistanceMonitoring(): void {
+    // Process deposit refunds daily
+    if (this.config.enableSybilResistance) {
+      setInterval(async () => {
+        if (!this.isRunning) return;
+
+        await this.submissionTracker.processRefunds();
+      }, 24 * 60 * 60 * 1000); // Check daily
+
+      // Initial refund check
+      this.submissionTracker.processRefunds();
+    }
+
+    // Monitor spam proofs if enabled
+    if (this.config.enableSpamProofSubmission) {
+      setInterval(async () => {
+        if (!this.isRunning) return;
+
+        await this.spamProofDetector.monitorSpamProofs();
+      }, 60000); // Check every minute
+
+      // Scan for spam intents periodically
+      setInterval(async () => {
+        if (!this.isRunning) return;
+
+        await this.scanForSpamIntents();
+      }, 5 * 60 * 1000); // Check every 5 minutes
+    }
+  }
+
+  /**
+   * Scan for potential spam intents and submit proofs
+   */
+  private async scanForSpamIntents(): Promise<void> {
+    try {
+      // Get recent intents from cache
+      const intents = this.ingester.getCachedIntents();
+
+      logger.debug('Scanning intents for spam', { count: intents.length });
+
+      for (const intent of intents) {
+        // Skip if we've already submitted a proof for this intent
+        const existingProofs = this.spamProofDetector.getSubmittedProofs();
+        if (existingProofs.some(p => p.targetIntentHash === intent.hash)) {
+          continue;
+        }
+
+        // Analyze intent for spam
+        const analysis = await this.spamProofDetector.analyzeIntent(intent);
+
+        if (!analysis) {
+          continue;
+        }
+
+        // Submit proof if confidence is high enough
+        if (this.spamProofDetector.shouldSubmitProof(analysis)) {
+          logger.info('Detected spam intent, submitting proof', {
+            intentHash: intent.hash,
+            confidence: analysis.confidence,
+          });
+
+          const result = await this.spamProofDetector.submitSpamProof(intent, analysis);
+
+          if (result.success) {
+            logger.info('Spam proof submitted successfully', {
+              proofId: result.proofId,
+              intentHash: intent.hash,
+            });
+          } else {
+            logger.warn('Failed to submit spam proof', {
+              intentHash: intent.hash,
+              error: result.error,
+            });
+          }
+        }
+      }
+    } catch (error) {
+      logger.error('Error scanning for spam intents', { error });
+    }
+  }
+
+  /**
    * Cleanup old embeddings from cache
    */
   private cleanupEmbeddingCache(): void {
@@ -560,6 +661,21 @@ export class MediatorNode {
       consensusFailed: number;
       timedOut: number;
     };
+    sybilResistanceStats?: {
+      totalSubmissionsToday: number;
+      totalDeposits: number;
+      activeDeposits: number;
+      refundedDeposits: number;
+      forfeitedDeposits: number;
+      totalDepositValue: number;
+    };
+    spamProofStats?: {
+      total: number;
+      pending: number;
+      validated: number;
+      rejected: number;
+      totalForfeited: number;
+    };
   } {
     const burnStats = this.burnManager.getBurnStats();
     const status: any = {
@@ -595,6 +711,16 @@ export class MediatorNode {
     // Include verification stats if semantic consensus is enabled
     if (this.config.enableSemanticConsensus) {
       status.verificationStats = this.semanticConsensusManager.getVerificationStats();
+    }
+
+    // Include Sybil Resistance stats if enabled
+    if (this.config.enableSybilResistance) {
+      status.sybilResistanceStats = this.submissionTracker.getStats();
+    }
+
+    // Include spam proof stats if enabled
+    if (this.config.enableSpamProofSubmission) {
+      status.spamProofStats = this.spamProofDetector.getSpamProofStats();
     }
 
     return status;

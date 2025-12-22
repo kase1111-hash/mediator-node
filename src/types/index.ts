@@ -230,6 +230,14 @@ export interface MediatorConfig {
   semanticSimilarityThreshold?: number; // Cosine similarity threshold for equivalence (default: 0.85)
   participateInVerification?: boolean; // Opt-in to participate as verifier (default: true)
 
+  // Sybil Resistance configuration
+  enableSybilResistance?: boolean; // Enable daily limits and deposits (default: false)
+  dailyFreeLimit?: number; // Free intent submissions per day per author (default: 3)
+  excessDepositAmount?: number; // Deposit required for 4th+ intent (default: 100 NLC)
+  depositRefundDays?: number; // Days before deposit can be refunded (default: 30)
+  enableSpamProofSubmission?: boolean; // Allow mediators to submit spam proofs (default: false)
+  minSpamConfidence?: number; // Minimum confidence for spam classification (default: 0.9)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -487,4 +495,64 @@ export interface SemanticVerification {
   consensusCount: number; // Number of semantically equivalent summaries
   requiredConsensus: number; // Typically 3
   completedAt?: number;
+}
+
+/**
+ * Sybil Resistance - Submission tracking and deposit management
+ */
+
+/**
+ * Daily submission record for an author
+ */
+export interface DailySubmissionRecord {
+  author: string;
+  date: string; // YYYY-MM-DD format
+  submissionCount: number;
+  freeSubmissionsRemaining: number;
+  depositsPaid: DepositRecord[];
+}
+
+/**
+ * Deposit record for excess submissions
+ */
+export interface DepositRecord {
+  depositId: string;
+  author: string;
+  intentHash: string;
+  amount: number; // Deposit amount in NLC
+  submittedAt: number; // Timestamp
+  refundDeadline: number; // Timestamp (submittedAt + refund period)
+  status: 'active' | 'refunded' | 'forfeited';
+  refundedAt?: number;
+  forfeitedAt?: number;
+  spamProofId?: string; // If forfeited, reference to spam proof
+}
+
+/**
+ * Spam proof submission against an intent
+ */
+export interface SpamProof {
+  proofId: string;
+  targetIntentHash: string;
+  targetAuthor: string;
+  submitterId: string;
+  evidence: string; // Prose explanation of why intent is spam
+  confidence: number; // 0-1, LLM confidence in spam classification
+  submittedAt: number;
+  status: 'pending' | 'validated' | 'rejected';
+  validatedAt?: number;
+  depositForfeited?: number; // Amount forfeited if validated
+}
+
+/**
+ * Submission limit check result
+ */
+export interface SubmissionLimitResult {
+  allowed: boolean;
+  isFree: boolean; // true if within free limit
+  requiresDeposit: boolean;
+  depositAmount?: number;
+  freeSubmissionsRemaining: number;
+  dailyCount: number;
+  reason?: string; // Why submission was blocked (if !allowed)
 }
