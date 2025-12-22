@@ -7,5 +7,6 @@ dist/
 *.db
 *.sqlite
 vector-db/
+test-vector-db/
 cache/
 .mediator-data/
