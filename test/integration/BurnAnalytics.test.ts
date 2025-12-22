@@ -131,18 +131,25 @@ describe('Burn Analytics Integration', () => {
     });
 
     it('should provide trend analysis after multiple burns', async () => {
-      // Simulate burns over time
+      // First submission for each user is free, so we need extra submissions to trigger burns
+      // Alice's 1st submission: FREE (no burn)
       await burnManager.executeFilingBurn('alice', 'intent1');
       jest.advanceTimersByTime(1000 * 60 * 60); // 1 hour
 
+      // Alice's 2nd submission: BURN (exceeds free daily limit)
       await burnManager.executeFilingBurn('alice', 'intent2');
       jest.advanceTimersByTime(1000 * 60 * 60); // 1 hour
 
+      // Bob's 1st submission: FREE (no burn)
       await burnManager.executeFilingBurn('bob', 'intent3');
+
+      // Bob's 2nd submission: BURN (exceeds free daily limit)
+      await burnManager.executeFilingBurn('bob', 'intent4');
 
       const analytics = mediatorNode.getBurnAnalytics();
       const trend = analytics.getTrendAnalysis('day');
 
+      // We should have at least 2 actual burns (alice's 2nd, bob's 2nd)
       expect(trend.summary.totalBurns).toBeGreaterThan(0);
       expect(trend.summary.totalAmount).toBeGreaterThan(0);
       expect(trend.summary.activeUsers).toBeGreaterThan(0);
