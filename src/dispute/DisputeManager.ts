@@ -18,6 +18,12 @@ import { EvidenceManager } from './EvidenceManager';
 import { ClarificationManager } from './ClarificationManager';
 import { EscalationManager } from './EscalationManager';
 import { DisputePackageBuilder, PackageBuildOptions } from './DisputePackageBuilder';
+import {
+  OutcomeRecorder,
+  OutcomeRecordingOptions,
+  AuthorityDecision,
+  SettlementDetails,
+} from './OutcomeRecorder';
 
 /**
  * Manages dispute declarations and lifecycle
@@ -31,6 +37,7 @@ export class DisputeManager {
   private clarificationManager?: ClarificationManager;
   private escalationManager: EscalationManager;
   private packageBuilder: DisputePackageBuilder;
+  private outcomeRecorder: OutcomeRecorder;
   private llmProvider?: LLMProvider;
 
   constructor(
@@ -40,7 +47,8 @@ export class DisputeManager {
     evidenceDataPath?: string,
     clarificationDataPath?: string,
     escalationDataPath?: string,
-    packageDataPath?: string
+    packageDataPath?: string,
+    outcomeDataPath?: string
   ) {
     this.config = config;
     this.llmProvider = llmProvider;
@@ -72,6 +80,11 @@ export class DisputeManager {
     const packagePath = packageDataPath ||
       (dataPath.includes('test-data') ? dataPath.replace('disputes', 'packages') : undefined);
     this.packageBuilder = new DisputePackageBuilder(config, packagePath);
+
+    // Initialize outcome recorder
+    const outcomePath = outcomeDataPath ||
+      (dataPath.includes('test-data') ? dataPath.replace('disputes', 'outcomes') : undefined);
+    this.outcomeRecorder = new OutcomeRecorder(config, outcomePath);
 
     // Load existing disputes
     this.loadDisputes();
@@ -924,6 +937,168 @@ No automated judgment is rendered by this system.
   }
 
   /**
+   * Record authority decision outcome
+   */
+  public async recordAuthorityDecision(params: {
+    disputeId: string;
+    authorityDecision: AuthorityDecision;
+    outcome: 'claimant_favored' | 'respondent_favored' | 'compromise' | 'dismissed' | 'other';
+    outcomeDescription: string;
+    options?: OutcomeRecordingOptions;
+  }) {
+    const dispute = this.disputes.get(params.disputeId);
+
+    if (!dispute) {
+      return {
+        success: false,
+        error: 'Dispute not found',
+      };
+    }
+
+    const result = await this.outcomeRecorder.recordAuthorityDecision(params);
+
+    if (result.success) {
+      // Update dispute with resolution
+      const resolution = this.outcomeRecorder.getOutcome(result.resolutionId!);
+      if (resolution) {
+        dispute.resolution = resolution;
+        dispute.status = 'resolved';
+        dispute.updatedAt = Date.now();
+        this.saveDispute(dispute);
+
+        // Unfreeze contested items
+        this.evidenceManager.unfreezeItemsForDispute(params.disputeId);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Record settlement outcome
+   */
+  public async recordSettlement(params: {
+    disputeId: string;
+    settlement: SettlementDetails;
+    options?: OutcomeRecordingOptions;
+  }) {
+    const dispute = this.disputes.get(params.disputeId);
+
+    if (!dispute) {
+      return {
+        success: false,
+        error: 'Dispute not found',
+      };
+    }
+
+    const result = await this.outcomeRecorder.recordSettlement(params);
+
+    if (result.success) {
+      // Update dispute with resolution
+      const resolution = this.outcomeRecorder.getOutcome(result.resolutionId!);
+      if (resolution) {
+        dispute.resolution = resolution;
+        dispute.status = 'resolved';
+        dispute.updatedAt = Date.now();
+        this.saveDispute(dispute);
+
+        // Unfreeze contested items
+        this.evidenceManager.unfreezeItemsForDispute(params.disputeId);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Record dismissal outcome
+   */
+  public async recordDismissal(params: {
+    disputeId: string;
+    dismissedBy: string;
+    reason: string;
+    options?: OutcomeRecordingOptions;
+  }) {
+    const dispute = this.disputes.get(params.disputeId);
+
+    if (!dispute) {
+      return {
+        success: false,
+        error: 'Dispute not found',
+      };
+    }
+
+    const result = await this.outcomeRecorder.recordDismissal(params);
+
+    if (result.success) {
+      // Update dispute with resolution
+      const resolution = this.outcomeRecorder.getOutcome(result.resolutionId!);
+      if (resolution) {
+        dispute.resolution = resolution;
+        dispute.status = 'dismissed';
+        dispute.updatedAt = Date.now();
+        this.saveDispute(dispute);
+
+        // Unfreeze contested items
+        this.evidenceManager.unfreezeItemsForDispute(params.disputeId);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Record withdrawal outcome
+   */
+  public async recordWithdrawal(params: {
+    disputeId: string;
+    withdrawnBy: string;
+    reason?: string;
+    options?: OutcomeRecordingOptions;
+  }) {
+    const dispute = this.disputes.get(params.disputeId);
+
+    if (!dispute) {
+      return {
+        success: false,
+        error: 'Dispute not found',
+      };
+    }
+
+    const result = await this.outcomeRecorder.recordWithdrawal(params);
+
+    if (result.success) {
+      // Update dispute with resolution
+      const resolution = this.outcomeRecorder.getOutcome(result.resolutionId!);
+      if (resolution) {
+        dispute.resolution = resolution;
+        dispute.status = 'dismissed';
+        dispute.updatedAt = Date.now();
+        this.saveDispute(dispute);
+
+        // Unfreeze contested items
+        this.evidenceManager.unfreezeItemsForDispute(params.disputeId);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Get outcome for dispute
+   */
+  public getOutcomeForDispute(disputeId: string) {
+    return this.outcomeRecorder.getOutcomeForDispute(disputeId);
+  }
+
+  /**
+   * Get outcome recorder (for testing/advanced usage)
+   */
+  public getOutcomeRecorder(): OutcomeRecorder {
+    return this.outcomeRecorder;
+  }
+
+  /**
    * Get statistics
    */
   public getStats(): {
@@ -935,6 +1110,7 @@ No automated judgment is rendered by this system.
     clarificationStats?: ReturnType<ClarificationManager['getStats']>;
     escalationStats?: ReturnType<EscalationManager['getStats']>;
     packageStats?: ReturnType<DisputePackageBuilder['getStats']>;
+    outcomeStats?: ReturnType<OutcomeRecorder['getStats']>;
   } {
     const disputesByStatus: Record<DisputeStatus, number> = {
       initiated: 0,
@@ -964,6 +1140,7 @@ No automated judgment is rendered by this system.
       clarificationStats: this.clarificationManager?.getStats(),
       escalationStats: this.escalationManager.getStats(),
       packageStats: this.packageBuilder.getStats(),
+      outcomeStats: this.outcomeRecorder.getStats(),
     };
   }
 }
