@@ -18,6 +18,7 @@ import {
   ReputationEventPayload,
   VerificationEventPayload,
   SystemEventPayload,
+  MetricsEventPayload,
 } from '../types';
 import { logger } from '../utils/logger';
 
@@ -37,7 +38,8 @@ export type EventPayload =
   | ChallengeEventPayload
   | ReputationEventPayload
   | VerificationEventPayload
-  | SystemEventPayload;
+  | SystemEventPayload
+  | MetricsEventPayload;
 
 /**
  * Event publisher for broadcasting events to subscribed WebSocket clients

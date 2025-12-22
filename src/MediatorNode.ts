@@ -20,6 +20,9 @@ import { LicensingManager } from './licensing/LicensingManager';
 import { MP05SettlementCoordinator } from './settlement/MP05SettlementCoordinator';
 import { WebSocketServer } from './websocket/WebSocketServer';
 import { EventPublisher } from './websocket/EventPublisher';
+import { HealthMonitor } from './monitoring/HealthMonitor';
+import { PerformanceAnalytics } from './monitoring/PerformanceAnalytics';
+import { MonitoringPublisher } from './monitoring/MonitoringPublisher';
 import { logger } from './utils/logger';
 
 /**
@@ -52,6 +55,9 @@ export class MediatorNode {
   private mp05Coordinator?: MP05SettlementCoordinator;
   private webSocketServer?: WebSocketServer;
   private eventPublisher?: EventPublisher;
+  private healthMonitor?: HealthMonitor;
+  private performanceAnalytics?: PerformanceAnalytics;
+  private monitoringPublisher?: MonitoringPublisher;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -132,6 +138,22 @@ export class MediatorNode {
       });
 
       this.eventPublisher = new EventPublisher(this.webSocketServer);
+    }
+
+    // Initialize monitoring system
+    if (config.enableMonitoring !== false) {
+      this.healthMonitor = new HealthMonitor(config);
+      this.performanceAnalytics = new PerformanceAnalytics(config);
+
+      // Initialize monitoring publisher if WebSocket is enabled
+      if (this.eventPublisher) {
+        this.monitoringPublisher = new MonitoringPublisher(
+          config,
+          this.eventPublisher,
+          this.healthMonitor,
+          this.performanceAnalytics
+        );
+      }
     }
 
     logger.info('Mediator node created', {
@@ -231,6 +253,25 @@ export class MediatorNode {
         });
       }
 
+      // Start monitoring system if enabled
+      if (this.healthMonitor) {
+        // Register component health checkers
+        this.registerHealthCheckers();
+        this.healthMonitor.start();
+      }
+
+      if (this.performanceAnalytics) {
+        this.performanceAnalytics.start();
+      }
+
+      if (this.monitoringPublisher) {
+        this.monitoringPublisher.start();
+        logger.info('Monitoring publisher started', {
+          healthInterval: this.config.monitoringHealthCheckInterval || 30000,
+          metricsInterval: this.config.monitoringMetricsInterval || 10000,
+        });
+      }
+
       logger.info('Mediator node started successfully', {
         reputation: this.reputationTracker.getWeight(),
         effectiveStake: this.stakeManager.getEffectiveStake(),
@@ -267,6 +308,19 @@ export class MediatorNode {
     // Stop Effort Capture system if running (MP-02)
     if (this.effortCaptureSystem) {
       this.effortCaptureSystem.stop();
+    }
+
+    // Stop monitoring system if running
+    if (this.monitoringPublisher) {
+      this.monitoringPublisher.stop();
+    }
+
+    if (this.performanceAnalytics) {
+      this.performanceAnalytics.stop();
+    }
+
+    if (this.healthMonitor) {
+      this.healthMonitor.stop();
     }
 
     // Stop WebSocket server if running
@@ -892,6 +946,147 @@ export class MediatorNode {
   }
 
   /**
+   * Register component health checkers with the HealthMonitor
+   */
+  private registerHealthCheckers(): void {
+    if (!this.healthMonitor) {
+      return;
+    }
+
+    // Vector database health checker
+    this.healthMonitor.registerComponent(
+      'vector-database',
+      HealthMonitor.createSimpleChecker(
+        'vector-database',
+        () => {
+          // Check if vector database is initialized
+          return this.vectorDb !== null;
+        },
+        'Vector database not initialized'
+      )
+    );
+
+    // LLM provider health checker
+    this.healthMonitor.registerComponent(
+      'llm-provider',
+      HealthMonitor.createSimpleChecker(
+        'llm-provider',
+        () => {
+          // Check if LLM provider is configured
+          return this.llmProvider !== null;
+        },
+        'LLM provider not initialized'
+      )
+    );
+
+    // WebSocket server health checker
+    if (this.webSocketServer) {
+      this.healthMonitor.registerComponent(
+        'websocket-server',
+        async () => {
+          const connections = this.webSocketServer?.getConnections().length || 0;
+          const maxConnections = this.config.webSocketMaxConnections || 1000;
+          const utilization = (connections / maxConnections) * 100;
+
+          let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+          if (utilization >= 90) {
+            status = 'unhealthy';
+          } else if (utilization >= 70) {
+            status = 'degraded';
+          }
+
+          return {
+            name: 'websocket-server',
+            status,
+            message: `WebSocket server running with ${connections}/${maxConnections} connections`,
+            lastCheck: Date.now(),
+            metadata: {
+              connections,
+              maxConnections,
+              utilization,
+            },
+          };
+        }
+      );
+    }
+
+    // Reputation tracker health checker
+    this.healthMonitor.registerComponent(
+      'reputation-tracker',
+      async () => {
+        const weight = this.reputationTracker.getWeight();
+
+        return {
+          name: 'reputation-tracker',
+          status: weight > 0 ? 'healthy' : 'degraded',
+          message: `Reputation weight: ${weight.toFixed(2)}`,
+          lastCheck: Date.now(),
+          metadata: {
+            weight,
+          },
+        };
+      }
+    );
+
+    // Stake manager health checker (if using DPoS)
+    if (this.config.consensusMode === 'dpos' || this.config.consensusMode === 'hybrid') {
+      this.healthMonitor.registerComponent(
+        'stake-manager',
+        async () => {
+          const effectiveStake = this.stakeManager.getEffectiveStake();
+          const meetsMinimum = this.stakeManager.meetsMinimumStake();
+
+          return {
+            name: 'stake-manager',
+            status: meetsMinimum ? 'healthy' : 'critical',
+            message: meetsMinimum
+              ? `Effective stake: ${effectiveStake}`
+              : 'Stake below minimum requirement',
+            lastCheck: Date.now(),
+            metadata: {
+              effectiveStake,
+              meetsMinimum,
+            },
+          };
+        }
+      );
+    }
+
+    // Load monitor health checker
+    this.healthMonitor.registerComponent(
+      'load-monitor',
+      async () => {
+        const metrics = this.loadMonitor.getCurrentMetrics();
+        const loadMultiplier = this.loadMonitor.getLoadMultiplier();
+
+        let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+        if (loadMultiplier >= 2.0) {
+          status = 'unhealthy';
+        } else if (loadMultiplier >= 1.5) {
+          status = 'degraded';
+        }
+
+        return {
+          name: 'load-monitor',
+          status,
+          message: `Load multiplier: ${loadMultiplier.toFixed(2)}x, Intent rate: ${metrics.intentSubmissionRate.toFixed(1)}/min`,
+          lastCheck: Date.now(),
+          metadata: {
+            loadMultiplier,
+            intentSubmissionRate: metrics.intentSubmissionRate,
+            activeIntentCount: metrics.activeIntentCount,
+            settlementRate: metrics.settlementRate,
+          },
+        };
+      }
+    );
+
+    logger.debug('Component health checkers registered', {
+      count: 5 + (this.webSocketServer ? 1 : 0),
+    });
+  }
+
+  /**
    * Get ChallengeManager instance for direct access
    */
   public getChallengeManager(): ChallengeManager {
@@ -938,5 +1133,26 @@ export class MediatorNode {
    */
   public getEventPublisher(): EventPublisher | undefined {
     return this.eventPublisher;
+  }
+
+  /**
+   * Get HealthMonitor instance for direct access
+   */
+  public getHealthMonitor(): HealthMonitor | undefined {
+    return this.healthMonitor;
+  }
+
+  /**
+   * Get PerformanceAnalytics instance for direct access
+   */
+  public getPerformanceAnalytics(): PerformanceAnalytics | undefined {
+    return this.performanceAnalytics;
+  }
+
+  /**
+   * Get MonitoringPublisher instance for direct access
+   */
+  public getMonitoringPublisher(): MonitoringPublisher | undefined {
+    return this.monitoringPublisher;
   }
 }

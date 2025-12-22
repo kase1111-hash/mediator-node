@@ -280,6 +280,15 @@ export interface MediatorConfig {
   webSocketMaxConnections?: number; // Maximum concurrent WebSocket connections (default: 1000)
   webSocketHeartbeatInterval?: number; // Heartbeat interval in ms (default: 30000)
 
+  // Monitoring & Analytics configuration
+  enableMonitoring?: boolean; // Enable health and performance monitoring (default: true)
+  monitoringHealthCheckInterval?: number; // Health check interval in ms (default: 30000)
+  monitoringMetricsInterval?: number; // Performance metrics interval in ms (default: 10000)
+  monitoringSnapshotRetention?: number; // Number of performance snapshots to keep (default: 100)
+  monitoringHighLatencyThreshold?: number; // High latency alert threshold in ms (default: 1000)
+  monitoringHighErrorRateThreshold?: number; // High error rate threshold per minute (default: 10)
+  monitoringHighMemoryThreshold?: number; // High memory usage threshold percentage (default: 90)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -1353,7 +1362,9 @@ export type WebSocketEventType =
   // System events
   | 'system.load_pressure_changed'
   | 'system.config_updated'
-  | 'system.node_status_changed';
+  | 'system.node_status_changed'
+  | 'system.health_update'
+  | 'system.metrics_snapshot';
 
 /**
  * Base structure for all WebSocket messages
@@ -1566,4 +1577,210 @@ export interface AuthenticationResponse {
   connectionId?: string;
   error?: string;
   expiresAt?: number;
+}
+
+/**
+ * ============================================================================
+ * Monitoring & Analytics System
+ * ============================================================================
+ */
+
+/**
+ * System health status
+ */
+export type HealthStatus = 'healthy' | 'degraded' | 'unhealthy' | 'critical';
+
+/**
+ * Component health check result
+ */
+export interface ComponentHealth {
+  name: string;
+  status: HealthStatus;
+  message?: string;
+  lastCheck: number;
+  responseTime?: number; // ms
+  errorCount?: number;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * System resource metrics
+ */
+export interface ResourceMetrics {
+  cpu: {
+    usage: number; // Percentage 0-100
+    loadAverage: number[]; // 1min, 5min, 15min
+  };
+  memory: {
+    used: number; // Bytes
+    total: number; // Bytes
+    percentage: number; // 0-100
+    heapUsed: number; // Bytes
+    heapTotal: number; // Bytes
+  };
+  uptime: number; // Seconds
+  timestamp: number;
+}
+
+/**
+ * Overall system health report
+ */
+export interface HealthReport {
+  status: HealthStatus;
+  timestamp: number;
+  uptime: number;
+  version: string;
+  components: ComponentHealth[];
+  resources: ResourceMetrics;
+  metrics: {
+    totalIntents: number;
+    totalSettlements: number;
+    activeConnections: number;
+    queueDepth: number;
+    errorRate: number; // Errors per minute
+  };
+}
+
+/**
+ * Performance metrics snapshot
+ */
+export interface PerformanceSnapshot {
+  timestamp: number;
+  interval: number; // Measurement interval in ms
+
+  // Event metrics
+  events: {
+    total: number;
+    rate: number; // Events per second
+    byType: Record<string, number>;
+    published: number;
+    filtered: number;
+    queueSize: number;
+  };
+
+  // WebSocket metrics
+  websocket: {
+    connections: number;
+    authenticated: number;
+    messagesIn: number;
+    messagesOut: number;
+    messageRate: number; // Messages per second
+    bytesIn: number;
+    bytesOut: number;
+    bandwidth: number; // Bytes per second
+    subscriptions: number;
+  };
+
+  // Operation metrics
+  operations: {
+    intentsIngested: number;
+    settlementsProposed: number;
+    challengesSubmitted: number;
+    burnsExecuted: number;
+    receiptsGenerated: number;
+    disputesInitiated: number;
+  };
+
+  // Latency metrics (in milliseconds)
+  latency: {
+    eventPublish: {
+      min: number;
+      max: number;
+      avg: number;
+      p50: number;
+      p95: number;
+      p99: number;
+    };
+    llmRequests: {
+      min: number;
+      max: number;
+      avg: number;
+      p50: number;
+      p95: number;
+      p99: number;
+    };
+  };
+
+  // Error metrics
+  errors: {
+    total: number;
+    rate: number; // Errors per minute
+    byType: Record<string, number>;
+  };
+}
+
+/**
+ * Performance analytics summary over time
+ */
+export interface PerformanceAnalytics {
+  period: {
+    start: number;
+    end: number;
+    duration: number; // ms
+  };
+
+  // Aggregate statistics
+  summary: {
+    totalEvents: number;
+    totalMessages: number;
+    totalErrors: number;
+    averageEventRate: number; // Events/sec
+    averageMessageRate: number; // Messages/sec
+    averageErrorRate: number; // Errors/min
+    peakEventRate: number;
+    peakMessageRate: number;
+    uptimePercentage: number;
+  };
+
+  // Historical snapshots
+  snapshots: PerformanceSnapshot[];
+
+  // Trends
+  trends: {
+    eventRate: 'increasing' | 'stable' | 'decreasing';
+    connectionCount: 'increasing' | 'stable' | 'decreasing';
+    errorRate: 'increasing' | 'stable' | 'decreasing';
+  };
+
+  // Alerts/warnings
+  alerts: PerformanceAlert[];
+}
+
+/**
+ * Performance alert/warning
+ */
+export interface PerformanceAlert {
+  id: string;
+  severity: 'info' | 'warning' | 'error' | 'critical';
+  type: 'high_latency' | 'high_error_rate' | 'high_memory' | 'high_queue_depth' | 'connection_limit' | 'other';
+  message: string;
+  timestamp: number;
+  value?: number;
+  threshold?: number;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Monitoring configuration
+ */
+export interface MonitoringConfig {
+  enabled: boolean;
+  healthCheckInterval: number; // ms
+  metricsInterval: number; // ms
+  snapshotRetention: number; // Number of snapshots to keep
+  alertThresholds: {
+    highLatency: number; // ms
+    highErrorRate: number; // Errors per minute
+    highMemory: number; // Percentage
+    highQueueDepth: number; // Number of items
+    connectionLimit: number; // Percentage of max
+  };
+}
+
+/**
+ * Real-time metrics event payload
+ */
+export interface MetricsEventPayload {
+  snapshot: PerformanceSnapshot;
+  health: HealthReport;
 }
