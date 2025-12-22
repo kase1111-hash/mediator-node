@@ -156,7 +156,10 @@ src/
 │   ├── SpamProofDetector.ts
 │   └── SubmissionTracker.ts
 └── consensus/                     # Consensus
-    └── SemanticConsensusManager.ts
+    ├── SemanticConsensusManager.ts
+    ├── StakeManager.ts
+    ├── AuthorityManager.ts
+    └── ValidatorRotationManager.ts  # DPoS slot-based rotation
 ```
 
 ### Test Coverage

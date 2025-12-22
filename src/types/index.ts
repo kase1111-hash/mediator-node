@@ -1896,3 +1896,82 @@ export interface MetricsEventPayload {
   snapshot: PerformanceSnapshot;
   health: HealthReport;
 }
+
+// ============================================================================
+// DPoS Validator Rotation Types
+// ============================================================================
+
+/**
+ * Validator information for rotation purposes
+ */
+export interface ValidatorInfo {
+  mediatorId: string;
+  effectiveStake: number;
+  isActive: boolean;
+  slotIndex: number; // -1 if not in active set
+  lastActiveAt: number;
+  joinedAt: number;
+  missedSlots: number; // Count of missed slots for jailing
+}
+
+/**
+ * Epoch represents a rotation period
+ */
+export interface Epoch {
+  epochNumber: number;
+  startTime: number;
+  endTime: number;
+  activeValidators: string[]; // Ordered list of mediator IDs
+  slotDurationMs: number;
+  totalSlots: number;
+}
+
+/**
+ * Slot assignment for a specific time
+ */
+export interface SlotAssignment {
+  epochNumber: number;
+  slotIndex: number;
+  validatorId: string;
+  startTime: number;
+  endTime: number;
+  isCurrentSlot: boolean;
+}
+
+/**
+ * Rotation event for tracking changes
+ */
+export interface RotationEvent {
+  eventId: string;
+  eventType: 'epoch_start' | 'validator_joined' | 'validator_left' | 'validator_jailed' | 'stake_changed';
+  timestamp: number;
+  epochNumber: number;
+  affectedValidators: string[];
+  details: Record<string, any>;
+}
+
+/**
+ * Configuration for validator rotation
+ */
+export interface RotationConfig {
+  activeSlots: number; // Number of active validator slots (default: 21)
+  rotationPeriodHours: number; // Epoch duration in hours (default: 24)
+  slotDurationMinutes: number; // How long each validator's slot lasts (default: 10)
+  minStakeForRotation: number; // Minimum stake to be considered (default: 1000)
+  jailThreshold: number; // Missed slots before jailing (default: 3)
+  unjailCooldownHours: number; // Hours before unjailing allowed (default: 24)
+}
+
+/**
+ * Rotation status summary
+ */
+export interface RotationStatus {
+  currentEpoch: Epoch | null;
+  currentSlot: SlotAssignment | null;
+  isCurrentValidator: boolean;
+  nextSlot: SlotAssignment | null;
+  validatorCount: number;
+  activeValidatorCount: number;
+  jailedCount: number;
+  config: RotationConfig;
+}

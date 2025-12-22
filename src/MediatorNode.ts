@@ -7,6 +7,7 @@ import { SettlementManager } from './settlement/SettlementManager';
 import { ReputationTracker } from './reputation/ReputationTracker';
 import { StakeManager } from './consensus/StakeManager';
 import { AuthorityManager } from './consensus/AuthorityManager';
+import { ValidatorRotationManager } from './consensus/ValidatorRotationManager';
 import { BurnManager } from './burn/BurnManager';
 import { LoadMonitor } from './burn/LoadMonitor';
 import { ChallengeDetector } from './challenge/ChallengeDetector';
@@ -43,6 +44,7 @@ export class MediatorNode {
   private reputationTracker: ReputationTracker;
   private stakeManager: StakeManager;
   private authorityManager: AuthorityManager;
+  private validatorRotationManager?: ValidatorRotationManager;
   private burnManager: BurnManager;
   private loadMonitor: LoadMonitor;
   private challengeDetector: ChallengeDetector;
@@ -163,6 +165,11 @@ export class MediatorNode {
       this.governanceManager = new GovernanceManager(config, this.stakeManager);
     }
 
+    // Initialize Validator Rotation system for DPoS mode
+    if (config.consensusMode === 'dpos' || config.consensusMode === 'hybrid') {
+      this.validatorRotationManager = new ValidatorRotationManager(config);
+    }
+
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
       consensusMode: config.consensusMode,
@@ -203,6 +210,23 @@ export class MediatorNode {
         if (!this.stakeManager.meetsMinimumStake()) {
           logger.error('Cannot start: Minimum stake requirement not met');
           return;
+        }
+
+        // Start validator rotation manager
+        if (this.validatorRotationManager) {
+          await this.validatorRotationManager.start();
+
+          // Register this mediator as a validator
+          const stake = this.stakeManager.getStake();
+          await this.validatorRotationManager.registerValidator(
+            this.config.mediatorPublicKey,
+            stake.effectiveStake
+          );
+
+          logger.info('Validator rotation started', {
+            isCurrentValidator: this.validatorRotationManager.isCurrentValidator(),
+            currentEpoch: this.validatorRotationManager.getCurrentEpoch()?.epochNumber,
+          });
         }
       }
 
@@ -321,6 +345,11 @@ export class MediatorNode {
     this.ingester.stopPolling();
     this.loadMonitor.stopMonitoring();
 
+    // Stop Validator Rotation manager if running
+    if (this.validatorRotationManager) {
+      this.validatorRotationManager.stop();
+    }
+
     // Stop Effort Capture system if running (MP-02)
     if (this.effortCaptureSystem) {
       this.effortCaptureSystem.stop();
@@ -376,6 +405,24 @@ export class MediatorNode {
    */
   private async executeAlignmentCycle(): Promise<void> {
     try {
+      // DPoS slot-based gating: only mediate during our assigned slot
+      if (this.validatorRotationManager && !this.validatorRotationManager.shouldMediate()) {
+        const nextSlot = this.validatorRotationManager.getNextSlotForMediator();
+        const timeUntilSlot = this.validatorRotationManager.getTimeUntilNextSlot();
+
+        logger.debug('Not our slot, skipping alignment cycle', {
+          currentSlot: this.validatorRotationManager.getCurrentSlot()?.validatorId,
+          nextSlotAt: nextSlot?.startTime ? new Date(nextSlot.startTime).toISOString() : 'N/A',
+          timeUntilSlotMs: timeUntilSlot,
+        });
+        return;
+      }
+
+      // Record slot activity if we're mediating
+      if (this.validatorRotationManager) {
+        this.validatorRotationManager.recordSlotActivity(this.config.mediatorPublicKey);
+      }
+
       logger.debug('Starting alignment cycle');
 
       // Phase 1: Ingestion (already running in background via IntentIngester)
@@ -912,6 +959,11 @@ export class MediatorNode {
     // Include licensing stats if enabled (MP-04)
     if (this.licensingManager) {
       status.licensingStats = this.licensingManager.getStats();
+    }
+
+    // Include validator rotation stats if enabled
+    if (this.validatorRotationManager) {
+      status.validatorRotationStats = this.validatorRotationManager.getStatus();
     }
 
     return status;

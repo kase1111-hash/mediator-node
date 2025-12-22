@@ -350,15 +350,23 @@ The NatLangChain Mediator Node has achieved **full implementation** of the MP-01
     - PerformanceAnalytics: Metrics collection
     - MonitoringPublisher: Metrics publishing
 
+18. **DPoS Validator Rotation** (`src/consensus/ValidatorRotationManager.ts`)
+    - Epoch-based rotation periods (configurable, default 24 hours)
+    - Stake-weighted validator selection (top N by effective stake)
+    - Round-robin slot assignment within epochs (default 10-minute slots)
+    - Missed slot tracking and automatic jailing
+    - Unjail cooldown period enforcement
+    - Dynamic validator set updates
+    - Slot-based mediation gating in DPoS/hybrid modes
+
 ### ⚠️ Enhancement Opportunities (Non-Critical)
 
 These features are functional but could be enhanced:
 
-1. **DPoS Validator Rotation** - Slot-based scheduling (stake tracking complete)
-2. **Fee Distribution to Delegators** - Proportional distribution (fee capture complete)
-3. **Custom Chain Integration** - Plugin system for different chain types
-4. **Unbonding Period Enforcement** - Time-locked stake withdrawal
-5. **Process Management** - Production daemon mode
+1. **Fee Distribution to Delegators** - Proportional distribution (fee capture complete)
+2. **Custom Chain Integration** - Plugin system for different chain types
+3. **Unbonding Period Enforcement** - Time-locked stake withdrawal
+4. **Process Management** - Production daemon mode
 
 ---
 
