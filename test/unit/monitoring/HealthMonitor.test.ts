@@ -114,7 +114,7 @@ describe('HealthMonitor', () => {
       expect(report.resources.cpu).toBeDefined();
       expect(report.resources.cpu.usage).toBeGreaterThanOrEqual(0);
       expect(report.resources.cpu.usage).toBeLessThanOrEqual(100);
-      expect(report.resources.cpu.loadAverage).toBeInstanceOf(Array);
+      expect(Array.isArray(report.resources.cpu.loadAverage)).toBe(true);
       expect(report.resources.cpu.loadAverage).toHaveLength(3);
     });
 
