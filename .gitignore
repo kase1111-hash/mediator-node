@@ -10,3 +10,5 @@ vector-db/
 test-vector-db/
 cache/
 .mediator-data/
+data/
+test-data/
