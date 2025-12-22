@@ -23,6 +23,9 @@ module.exports = {
     },
   },
   moduleFileExtensions: ['ts', 'js', 'json'],
+  moduleNameMapper: {
+    '^hnswlib-node$': '<rootDir>/__mocks__/hnswlib-node.js',
+  },
   verbose: true,
   testTimeout: 10000,
   clearMocks: true,

@@ -12,7 +12,6 @@
  * - Error handling
  */
 
-import { VectorDatabase } from '../../../src/mapping/VectorDatabase';
 import { MediatorConfig, Intent, ConsensusMode } from '../../../src/types';
 import { VALID_INTENT_1, VALID_INTENT_2, VALID_INTENT_3, ALL_VALID_INTENTS } from '../../fixtures/intents';
 import { createMockEmbedding } from '../../utils/testUtils';
@@ -23,25 +22,8 @@ import * as path from 'path';
 jest.mock('fs');
 const mockedFs = fs as jest.Mocked<typeof fs>;
 
-// Mock hnswlib-node
-class MockHNSW {
-  searchKnn = jest.fn().mockReturnValue({ neighbors: [], distances: [] });
-  addPoint = jest.fn();
-  initIndex = jest.fn();
-  readIndex = jest.fn();
-  writeIndex = jest.fn();
-}
-
-let mockHNSWInstance: MockHNSW;
-
-jest.mock('hnswlib-node', () => {
-  return {
-    HierarchicalNSW: jest.fn().mockImplementation(() => {
-      mockHNSWInstance = new MockHNSW();
-      return mockHNSWInstance;
-    }),
-  };
-});
+// Mock hnswlib-node - must be before VectorDatabase import
+jest.mock('hnswlib-node');
 
 // Mock logger
 jest.mock('../../../src/utils/logger', () => ({
@@ -52,6 +34,16 @@ jest.mock('../../../src/utils/logger', () => ({
     debug: jest.fn(),
   },
 }));
+
+// Import VectorDatabase AFTER mocks are set up
+import { VectorDatabase } from '../../../src/mapping/VectorDatabase';
+
+// Spy references for HNSW methods
+let initIndexSpy: jest.SpyInstance;
+let addPointSpy: jest.SpyInstance;
+let searchKnnSpy: jest.SpyInstance;
+let readIndexSpy: jest.SpyInstance;
+let writeIndexSpy: jest.SpyInstance;
 
 describe('VectorDatabase', () => {
   let config: MediatorConfig;
@@ -76,17 +68,23 @@ describe('VectorDatabase', () => {
       logLevel: 'info',
     };
 
-    // Create VectorDatabase - this creates the mock HNSW instance
-    vectorDb = new VectorDatabase(config);
+    // Get the mocked HierarchicalNSW class
+    const { HierarchicalNSW } = jest.requireMock('hnswlib-node');
 
-    // Now we can reset the mocks on the instance
-    if (mockHNSWInstance) {
-      mockHNSWInstance.initIndex.mockClear();
-      mockHNSWInstance.addPoint.mockClear();
-      mockHNSWInstance.readIndex.mockClear();
-      mockHNSWInstance.writeIndex.mockClear();
-      mockHNSWInstance.searchKnn.mockClear().mockReturnValue({ neighbors: [], distances: [] });
-    }
+    // Set up spies on HierarchicalNSW prototype methods
+    initIndexSpy = jest.spyOn(HierarchicalNSW.prototype, 'initIndex').mockImplementation(() => {});
+    addPointSpy = jest.spyOn(HierarchicalNSW.prototype, 'addPoint').mockImplementation(() => {});
+    searchKnnSpy = jest.spyOn(HierarchicalNSW.prototype, 'searchKnn').mockReturnValue({ neighbors: [], distances: [] });
+    readIndexSpy = jest.spyOn(HierarchicalNSW.prototype, 'readIndex').mockResolvedValue(true);
+    writeIndexSpy = jest.spyOn(HierarchicalNSW.prototype, 'writeIndex').mockResolvedValue(true);
+
+    // Create VectorDatabase - uses manual mock from __mocks__/hnswlib-node.js
+    vectorDb = new VectorDatabase(config);
+  });
+
+  afterEach(() => {
+    // Restore all spies
+    jest.restoreAllMocks();
   });
 
   describe('Constructor', () => {
@@ -116,20 +114,20 @@ describe('VectorDatabase', () => {
     it('should initialize new index when no existing index found', async () => {
       await vectorDb.initialize(10000);
 
-      expect(mockHNSWInstance.initIndex).toHaveBeenCalledWith(10000);
+      expect(initIndexSpy).toHaveBeenCalledWith(10000);
       expect(mockedFs.mkdirSync).toHaveBeenCalledWith(testDbPath, { recursive: true });
     });
 
     it('should use default maxElements if not provided', async () => {
       await vectorDb.initialize();
 
-      expect(mockHNSWInstance.initIndex).toHaveBeenCalledWith(10000);
+      expect(initIndexSpy).toHaveBeenCalledWith(10000);
     });
 
     it('should accept custom maxElements', async () => {
       await vectorDb.initialize(5000);
 
-      expect(mockHNSWInstance.initIndex).toHaveBeenCalledWith(5000);
+      expect(initIndexSpy).toHaveBeenCalledWith(5000);
     });
 
     it('should create directory if it does not exist', async () => {
@@ -168,7 +166,7 @@ describe('VectorDatabase', () => {
 
       await vectorDb.initialize();
 
-      expect(mockHNSWInstance.readIndex).toHaveBeenCalledWith(indexPath);
+      expect(readIndexSpy).toHaveBeenCalledWith(indexPath);
       expect(mockedFs.readFileSync).toHaveBeenCalledWith(mapPath, 'utf-8');
     });
 
@@ -217,14 +215,14 @@ describe('VectorDatabase', () => {
 
       await vectorDb.initialize();
 
-      expect(mockHNSWInstance.readIndex).toHaveBeenCalledWith(indexPath);
+      expect(readIndexSpy).toHaveBeenCalledWith(indexPath);
     });
   });
 
   describe('Initialization - Error Handling', () => {
     it('should throw error if index creation fails', async () => {
       mockedFs.existsSync.mockReturnValue(false);
-      mockHNSWInstance.initIndex.mockImplementation(() => {
+      initIndexSpy.mockImplementation(() => {
         throw new Error('Index creation failed');
       });
 
@@ -233,7 +231,7 @@ describe('VectorDatabase', () => {
 
     it('should throw error if index loading fails', async () => {
       mockedFs.existsSync.mockReturnValue(true);
-      mockHNSWInstance.readIndex.mockImplementation(() => {
+      readIndexSpy.mockImplementation(() => {
         throw new Error('Index load failed');
       });
 
@@ -242,7 +240,10 @@ describe('VectorDatabase', () => {
 
     it('should handle corrupted intent map file', async () => {
       const indexPath = path.join(testDbPath, 'index.bin');
-      mockedFs.existsSync.mockImplementation((path: any) => path === indexPath);
+      const mapPath = path.join(testDbPath, 'intent-map.json');
+      mockedFs.existsSync.mockImplementation((path: any) => {
+        return path === indexPath || path === mapPath;
+      });
       mockedFs.readFileSync.mockReturnValue('invalid json {]');
 
       await expect(vectorDb.initialize()).rejects.toThrow();
@@ -261,7 +262,7 @@ describe('VectorDatabase', () => {
 
       await vectorDb.addIntent(VALID_INTENT_1, embedding);
 
-      expect(mockHNSWInstance.addPoint).toHaveBeenCalledWith(embedding, 0);
+      expect(addPointSpy).toHaveBeenCalledWith(embedding, 0);
     });
 
     it('should increment ID for each intent', async () => {
@@ -271,8 +272,8 @@ describe('VectorDatabase', () => {
       await vectorDb.addIntent(VALID_INTENT_1, embedding1);
       await vectorDb.addIntent(VALID_INTENT_2, embedding2);
 
-      expect(mockHNSWInstance.addPoint).toHaveBeenCalledWith(embedding1, 0);
-      expect(mockHNSWInstance.addPoint).toHaveBeenCalledWith(embedding2, 1);
+      expect(addPointSpy).toHaveBeenCalledWith(embedding1, 0);
+      expect(addPointSpy).toHaveBeenCalledWith(embedding2, 1);
     });
 
     it('should track intents in map', async () => {
@@ -306,7 +307,7 @@ describe('VectorDatabase', () => {
       const wrongDimensionEmbedding = createMockEmbedding(512);
 
       // This should fail at HNSW level
-      mockHNSWInstance.addPoint.mockImplementation(() => {
+      addPointSpy.mockImplementation(() => {
         throw new Error('Dimension mismatch');
       });
 
@@ -328,7 +329,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should find similar intents', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [0, 1],
         distances: [0.1, 0.2],
       });
@@ -336,12 +337,12 @@ describe('VectorDatabase', () => {
       const queryEmbedding = createMockEmbedding(1024);
       const candidates = await vectorDb.findSimilarIntents(queryEmbedding, 5);
 
-      expect(mockHNSWInstance.searchKnn).toHaveBeenCalledWith(queryEmbedding, 10); // k * 2
+      expect(searchKnnSpy).toHaveBeenCalledWith(queryEmbedding, 10); // k * 2
       expect(candidates.length).toBeGreaterThan(0);
     });
 
     it('should convert distance to similarity score', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [0],
         distances: [0.3], // distance
       });
@@ -353,7 +354,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should filter out low similarity results', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [0, 1],
         distances: [0.1, 0.6], // second one is below 0.5 similarity
       });
@@ -365,7 +366,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should exclude specified hash', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [0, 1, 2],
         distances: [0.1, 0.2, 0.3],
       });
@@ -382,7 +383,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should respect k parameter', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [0, 1, 2],
         distances: [0.1, 0.2, 0.3],
       });
@@ -394,7 +395,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should calculate priority based on similarity and fee', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [0],
         distances: [0.2],
       });
@@ -408,7 +409,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should handle empty search results', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [],
         distances: [],
       });
@@ -420,7 +421,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should handle search errors gracefully', async () => {
-      mockHNSWInstance.searchKnn.mockImplementation(() => {
+      searchKnnSpy.mockImplementation(() => {
         throw new Error('Search failed');
       });
 
@@ -452,7 +453,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should find alignment candidates for multiple intents', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [1],
         distances: [0.2],
       });
@@ -472,7 +473,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should sort candidates by priority', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [1, 2],
         distances: [0.1, 0.3],
       });
@@ -494,7 +495,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should respect topK parameter', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [1, 2],
         distances: [0.1, 0.2],
       });
@@ -514,7 +515,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should calculate combined estimated value', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [1],
         distances: [0.2],
       });
@@ -616,7 +617,7 @@ describe('VectorDatabase', () => {
       await vectorDb.save();
 
       const indexPath = path.join(testDbPath, 'index.bin');
-      expect(mockHNSWInstance.writeIndex).toHaveBeenCalledWith(indexPath);
+      expect(writeIndexSpy).toHaveBeenCalledWith(indexPath);
     });
 
     it('should save intent map to JSON', async () => {
@@ -638,7 +639,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should throw error if save fails', async () => {
-      mockHNSWInstance.writeIndex.mockImplementation(() => {
+      writeIndexSpy.mockImplementation(() => {
         throw new Error('Write failed');
       });
 
@@ -742,7 +743,7 @@ describe('VectorDatabase', () => {
     });
 
     it('should handle search with no intents added', async () => {
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [],
         distances: [],
       });
@@ -759,7 +760,7 @@ describe('VectorDatabase', () => {
 
       await vectorDb.addIntent(intentNoFee, createMockEmbedding(1024));
 
-      mockHNSWInstance.searchKnn.mockReturnValue({
+      searchKnnSpy.mockReturnValue({
         neighbors: [0],
         distances: [0.2],
       });
