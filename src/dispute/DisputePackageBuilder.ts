@@ -276,6 +276,7 @@ export class DisputePackageBuilder {
     const canonical = {
       disputeId: packageData.disputeId,
       createdAt: packageData.createdAt,
+      summary: packageData.summary,
       timeline: packageData.timeline,
       bundledRecords: packageData.bundledRecords,
     };
