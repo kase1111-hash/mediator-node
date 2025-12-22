@@ -10,6 +10,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { logger } from '../utils/logger';
+import { z } from 'zod';
+import {
+  FrozenItemSchema,
+  EvidenceItemSchema,
+  readAllJSONFiles,
+  writeJSONFile,
+  buildSafeFilePath,
+} from '../validation';
 
 /**
  * Item status for evidence freezing
@@ -438,49 +446,57 @@ export class EvidenceManager {
   }
 
   /**
-   * Save frozen item to disk
+   * Save frozen item to disk with validation
    */
   private saveFrozenItem(item: FrozenItem): void {
-    const filePath = path.join(this.dataPath, `${item.itemId}.json`);
-
     try {
-      fs.writeFileSync(filePath, JSON.stringify(item, null, 2));
-    } catch (error) {
+      // SECURITY: Use safe file path building to prevent path traversal
+      const filePath = buildSafeFilePath(this.dataPath, item.itemId, '.json');
+
+      // SECURITY: Validate frozen item data before writing
+      writeJSONFile(filePath, item, FrozenItemSchema as unknown as z.ZodType<FrozenItem>, {
+        baseDir: this.dataPath,
+        createDir: true,
+      });
+
+      logger.debug('Frozen item saved successfully', {
+        itemId: item.itemId,
+      });
+    } catch (error: any) {
       logger.error('Error saving frozen item', {
         itemId: item.itemId,
-        error,
+        error: error.message,
       });
+      throw error;
     }
   }
 
   /**
-   * Load all frozen items from disk
+   * Load all frozen items from disk with validation
    */
   private loadFrozenItems(): void {
-    if (!fs.existsSync(this.dataPath)) {
-      return;
-    }
-
     try {
-      const files = fs.readdirSync(this.dataPath);
+      // SECURITY: Use safe file operations with schema validation
+      const items = readAllJSONFiles(this.dataPath, FrozenItemSchema as unknown as z.ZodType<FrozenItem>, {
+        baseDir: this.dataPath,
+      });
 
-      for (const file of files) {
-        if (!file.endsWith('.json') || file.startsWith('snapshot-')) {
+      // Load validated frozen items into memory (skip snapshot files)
+      for (const item of items) {
+        // Skip if this looks like a snapshot file
+        if (item.itemId && item.itemId.startsWith('snapshot-')) {
           continue;
         }
-
-        const filePath = path.join(this.dataPath, file);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const item: FrozenItem = JSON.parse(content);
-
         this.frozenItems.set(item.itemId, item);
       }
 
       logger.info('Frozen items loaded from disk', {
         count: this.frozenItems.size,
       });
-    } catch (error) {
-      logger.error('Error loading frozen items', { error });
+    } catch (error: any) {
+      logger.error('Error loading frozen items', {
+        error: error.message,
+      });
     }
   }
 
