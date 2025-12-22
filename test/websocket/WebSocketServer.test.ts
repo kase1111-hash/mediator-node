@@ -152,16 +152,20 @@ describe('WebSocketServer', () => {
       client = new WebSocket(`ws://localhost:${testPort}`);
 
       client.on('open', () => {
+        // Use same timestamp and nonce for signature creation and message
+        const timestamp = Date.now();
+        const nonce = AuthenticationService.generateNonce();
+
         const authMessage: AuthenticationMessage = {
           action: 'authenticate',
           identity: 'test-user',
-          timestamp: Date.now(),
+          timestamp: timestamp,
           signature: AuthenticationService.createSignature(
             'test-user',
-            Date.now(),
-            AuthenticationService.generateNonce()
+            timestamp,
+            nonce
           ),
-          nonce: AuthenticationService.generateNonce(),
+          nonce: nonce,
         };
 
         client.send(JSON.stringify(authMessage));
