@@ -9,6 +9,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const rateLimit = require('express-rate-limit');
+const helmet = require('helmet');
 
 const app = express();
 const PORT = process.env.PORT || 8545;
@@ -40,9 +41,76 @@ const adminLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+// SECURITY: Apply security headers with Helmet
+app.use(helmet({
+  // Content Security Policy
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", 'data:', 'https:'],
+    },
+  },
+  // Strict Transport Security (HSTS)
+  hsts: {
+    maxAge: 31536000, // 1 year
+    includeSubDomains: true,
+    preload: true,
+  },
+  // X-Frame-Options
+  frameguard: {
+    action: 'deny',
+  },
+  // X-Content-Type-Options
+  noSniff: true,
+  // X-XSS-Protection (deprecated but still good for older browsers)
+  xssFilter: true,
+  // Referrer-Policy
+  referrerPolicy: {
+    policy: 'strict-origin-when-cross-origin',
+  },
+}));
+
 app.use(cors());
 app.use(bodyParser.json());
 app.use(generalLimiter);
+
+// SECURITY: Request logging and audit trail
+app.use((req, res, next) => {
+  const startTime = Date.now();
+
+  // Log request
+  console.log(`[AUDIT] ${new Date().toISOString()} ${req.method} ${req.path}`, {
+    ip: req.ip || req.connection.remoteAddress,
+    userAgent: req.get('user-agent'),
+    contentLength: req.get('content-length'),
+  });
+
+  // Log response when finished
+  res.on('finish', () => {
+    const duration = Date.now() - startTime;
+    const logLevel = res.statusCode >= 400 ? 'WARN' : 'INFO';
+
+    console.log(`[${logLevel}] ${new Date().toISOString()} ${req.method} ${req.path} ${res.statusCode} ${duration}ms`, {
+      ip: req.ip || req.connection.remoteAddress,
+      status: res.statusCode,
+      duration,
+    });
+
+    // Log security events
+    if (res.statusCode === 400 || res.statusCode === 401 || res.statusCode === 403 || res.statusCode === 415 || res.statusCode === 429) {
+      console.log(`[SECURITY] Security event: ${res.statusCode}`, {
+        method: req.method,
+        path: req.path,
+        ip: req.ip || req.connection.remoteAddress,
+        status: res.statusCode,
+      });
+    }
+  });
+
+  next();
+});
 
 // SECURITY: Content-Type validation middleware for POST/PUT/PATCH requests
 app.use((req, res, next) => {
