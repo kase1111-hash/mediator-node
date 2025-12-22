@@ -248,3 +248,112 @@ export interface NegotiationResult {
   modelUsed: string;
   promptHash: string;
 }
+
+/**
+ * Burn Analytics Types (Phase 6)
+ */
+
+export type TimeWindow = 'hour' | 'day' | 'week' | 'month' | 'all';
+
+export interface BurnTimeSeriesData {
+  timestamp: number;
+  totalBurns: number;
+  totalAmount: number;
+  averageBurn: number;
+  uniqueUsers: number;
+  byType: {
+    base_filing: number;
+    escalated: number;
+    success: number;
+    load_scaled: number;
+  };
+}
+
+export interface BurnTrendAnalysis {
+  period: TimeWindow;
+  dataPoints: BurnTimeSeriesData[];
+  summary: {
+    totalBurns: number;
+    totalAmount: number;
+    averageBurnPerTransaction: number;
+    averageBurnPerUser: number;
+    growthRate: number; // Percentage change from previous period
+    peakBurnTime: number; // Timestamp of highest activity
+    activeUsers: number;
+  };
+}
+
+export interface UserBurnAnalytics {
+  userId: string;
+  totalBurns: number;
+  totalAmount: number;
+  averageBurn: number;
+  firstBurn: number; // Timestamp
+  lastBurn: number; // Timestamp
+  burnsByType: Record<BurnType, number>;
+  daysSinceFirstBurn: number;
+  isActive: boolean; // Burned in last 7 days
+}
+
+export interface BurnLeaderboard {
+  topBurnersByAmount: Array<{
+    userId: string;
+    totalAmount: number;
+    burnCount: number;
+  }>;
+  topBurnersByVolume: Array<{
+    userId: string;
+    burnCount: number;
+    totalAmount: number;
+  }>;
+  mostRecentBurners: Array<{
+    userId: string;
+    lastBurnTime: number;
+    lastBurnAmount: number;
+  }>;
+}
+
+export interface DashboardMetrics {
+  overview: {
+    totalBurnsAllTime: number;
+    totalAmountBurned: number;
+    totalActiveUsers: number;
+    averageBurnPerUser: number;
+  };
+  today: {
+    burns: number;
+    amount: number;
+    uniqueUsers: number;
+    averageBurn: number;
+  };
+  thisWeek: {
+    burns: number;
+    amount: number;
+    uniqueUsers: number;
+    growthVsLastWeek: number; // Percentage
+  };
+  thisMonth: {
+    burns: number;
+    amount: number;
+    uniqueUsers: number;
+    growthVsLastMonth: number; // Percentage
+  };
+  distribution: {
+    byType: Record<BurnType, { count: number; amount: number; percentage: number }>;
+    byTimeOfDay: Array<{ hour: number; burns: number; amount: number }>;
+  };
+  loadMetrics: {
+    averageMultiplier: number;
+    peakMultiplier: number;
+    currentMultiplier: number;
+    multiplierHistory: Array<{ timestamp: number; multiplier: number }>;
+  };
+}
+
+export interface BurnForecast {
+  period: TimeWindow;
+  projectedBurns: number;
+  projectedAmount: number;
+  confidence: number; // 0-1
+  basedOnDataPoints: number;
+}
