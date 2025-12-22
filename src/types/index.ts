@@ -264,6 +264,14 @@ export interface MediatorConfig {
   autoExpireCheck?: boolean; // Auto-check and expire licenses/delegations (default: true)
   enableViolationTracking?: boolean; // Track scope violations (default: true)
 
+  // MP-05: Settlement & Capitalization Interface configuration
+  enableSettlementSystem?: boolean; // Enable settlement and capitalization (default: false)
+  requireMutualSettlement?: boolean; // Require all parties to declare (default: true)
+  allowPartialSettlement?: boolean; // Allow staged/milestone settlements (default: true)
+  enableCapitalization?: boolean; // Enable capitalization events (default: false)
+  enableRiskTracking?: boolean; // Track settlement risks (default: true)
+  autoValidatePreconditions?: boolean; // Auto-check MP-01/02/03/04 preconditions (default: true)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -1039,4 +1047,203 @@ export interface DelegatedAction {
   referencedGrant: string; // Must reference the delegation grant
   actionHash: string; // SHA-256 of action contents
   violationId?: string; // If action violated scope
+}
+
+// ============================================================================
+// MP-05: Settlement & Capitalization Interface Types
+// ============================================================================
+
+/**
+ * MP-05 Settlement status
+ */
+export type MP05SettlementStatus =
+  | 'declared'      // Initial declaration by one or more parties
+  | 'ratified'      // All required parties have declared
+  | 'finalized'     // Settlement is complete and immutable
+  | 'contested'     // Under dispute (MP-03)
+  | 'reversed';     // Reversed by new declaration
+
+/**
+ * Value type for capitalization
+ */
+export type ValueType =
+  | 'payment_claim'
+  | 'revenue_share'
+  | 'equity_interest'
+  | 'token'
+  | 'contractual_right'
+  | 'other';
+
+/**
+ * Settlement stage for partial/milestone settlements
+ */
+export interface SettlementStage {
+  stageId: string;
+  stageNumber: number;
+  description: string;
+  completionCriteria: string;
+  valuePercentage?: number; // % of total value
+  completedAt?: number;
+  completedBy?: string;
+}
+
+/**
+ * Individual party's settlement declaration
+ */
+export interface SettlementDeclaration {
+  declarationId: string;
+  settlementId: string;
+  declaringPartyId: string;
+  declarationStatement: string; // Natural language statement
+  referencedAgreements: string[]; // Agreement IDs from MP-01
+  referencedReceipts: string[]; // Receipt IDs from MP-02
+  referencedLicenses?: string[]; // License IDs from MP-04
+  valueDescription?: string; // Description of value realized
+  declaredAt: number;
+  humanAuthorship: boolean;
+  signature?: string;
+  declarationHash: string;
+}
+
+/**
+ * Settlement record - immutable record of completed settlement
+ */
+export interface Settlement {
+  settlementId: string;
+  status: MP05SettlementStatus;
+
+  // References to upstream artifacts
+  referencedAgreements: string[]; // MP-01 agreements
+  referencedReceipts: string[]; // MP-02 receipts
+  referencedLicenses?: string[]; // MP-04 licenses
+  referencedDelegations?: string[]; // MP-04 delegations
+
+  // Parties and declarations
+  requiredParties: string[]; // Parties that must declare
+  declarations: SettlementDeclaration[]; // Individual declarations
+
+  // Settlement details
+  settlementStatement: string; // Overall settlement description
+  valueDescription?: string; // Description of value realized
+
+  // Lifecycle
+  initiatedAt: number;
+  initiatedBy: string;
+  ratifiedAt?: number; // When all parties declared
+  finalizedAt?: number; // When settlement became immutable
+
+  // Staged settlement support
+  isStaged: boolean;
+  stages?: SettlementStage[];
+  currentStage?: number;
+
+  // Dispute integration (MP-03)
+  contestedAt?: number;
+  disputeId?: string;
+  reversedAt?: number;
+  reversalSettlementId?: string; // ID of reversal settlement
+
+  // Metadata
+  settlementHash: string; // SHA-256 of settlement contents
+  immutable: boolean; // True when finalized
+}
+
+/**
+ * Capitalization event - transformation into value instrument
+ */
+export interface CapitalizationEvent {
+  eventId: string;
+  settlementId: string;
+  valueType: ValueType;
+
+  // Value details
+  amount?: string; // Numeric amount if applicable
+  formula?: string; // Formula for calculated value
+  rights?: string[]; // Specific rights granted
+  conditions?: string[]; // Vesting or other conditions
+
+  // Parties
+  beneficiaries: string[]; // Who receives value
+  issuedBy: string;
+
+  // External execution
+  externalReferences?: {
+    blockchain?: string; // Chain identifier
+    contractAddress?: string;
+    transactionHash?: string;
+    legalInstrument?: string;
+    accountingReference?: string;
+  };
+
+  // Lifecycle
+  createdAt: number;
+  executedAt?: number;
+
+  // Metadata
+  eventHash: string;
+}
+
+/**
+ * Capitalization interface - structured output for external systems
+ */
+export interface CapitalizationInterface {
+  interfaceId: string;
+  settlementId: string;
+  eventId: string;
+
+  // Structured data for external consumption
+  valueType: ValueType;
+  amount?: string;
+  currency?: string;
+  beneficiaries: {
+    partyId: string;
+    percentage?: number;
+    amount?: string;
+    rights?: string[];
+  }[];
+
+  // Conditions and vesting
+  conditions?: {
+    type: string;
+    description: string;
+    dueDate?: number;
+  }[];
+
+  // Audit trail
+  upstreamReferences: {
+    agreements: string[];
+    receipts: string[];
+    licenses?: string[];
+  };
+
+  // Execution hints
+  executionHints?: {
+    smartContractABI?: string;
+    paymentInstructions?: string;
+    legalTemplate?: string;
+  };
+
+  createdAt: number;
+  interfaceHash: string;
+}
+
+/**
+ * Settlement risk record - tracks potential abuse
+ */
+export interface SettlementRisk {
+  riskId: string;
+  settlementId: string;
+  riskType:
+    | 'premature_settlement'        // Declared before preconditions met
+    | 'disputed_conditions'         // Settlement under active dispute
+    | 'missing_references'          // Capitalization without valid upstream refs
+    | 'unauthorized_declaration'    // Declaration by non-party
+    | 'double_settlement';          // Same artifacts settled multiple times
+
+  description: string;
+  detectedAt: number;
+  severity: 'low' | 'medium' | 'high';
+  resolved: boolean;
+  resolvedAt?: number;
+  evidence?: string[];
 }
