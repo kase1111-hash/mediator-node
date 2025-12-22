@@ -75,6 +75,15 @@ export class ConfigLoader {
       minConfidenceToChallenge: this.getOptionalNumber('MIN_CONFIDENCE_TO_CHALLENGE'),
       challengeCheckInterval: this.getOptionalNumber('CHALLENGE_CHECK_INTERVAL'),
 
+      // Semantic Consensus Verification configuration
+      enableSemanticConsensus: this.getOptional('ENABLE_SEMANTIC_CONSENSUS') === 'true',
+      highValueThreshold: this.getOptionalNumber('HIGH_VALUE_THRESHOLD'),
+      verificationDeadlineHours: this.getOptionalNumber('VERIFICATION_DEADLINE_HOURS'),
+      requiredVerifiers: this.getOptionalNumber('REQUIRED_VERIFIERS'),
+      requiredConsensus: this.getOptionalNumber('REQUIRED_CONSENSUS'),
+      semanticSimilarityThreshold: this.getOptionalNumber('SEMANTIC_SIMILARITY_THRESHOLD'),
+      participateInVerification: this.getOptional('PARTICIPATE_IN_VERIFICATION', 'true') === 'true',
+
       // Logging
       logLevel: this.getLogLevel(),
     };
