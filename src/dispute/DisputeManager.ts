@@ -17,6 +17,7 @@ import { logger } from '../utils/logger';
 import { EvidenceManager } from './EvidenceManager';
 import { ClarificationManager } from './ClarificationManager';
 import { EscalationManager } from './EscalationManager';
+import { DisputePackageBuilder, PackageBuildOptions } from './DisputePackageBuilder';
 
 /**
  * Manages dispute declarations and lifecycle
@@ -29,6 +30,7 @@ export class DisputeManager {
   private evidenceManager: EvidenceManager;
   private clarificationManager?: ClarificationManager;
   private escalationManager: EscalationManager;
+  private packageBuilder: DisputePackageBuilder;
   private llmProvider?: LLMProvider;
 
   constructor(
@@ -37,7 +39,8 @@ export class DisputeManager {
     dataPath: string = './data/disputes',
     evidenceDataPath?: string,
     clarificationDataPath?: string,
-    escalationDataPath?: string
+    escalationDataPath?: string,
+    packageDataPath?: string
   ) {
     this.config = config;
     this.llmProvider = llmProvider;
@@ -64,6 +67,11 @@ export class DisputeManager {
     const escalationPath = escalationDataPath ||
       (dataPath.includes('test-data') ? dataPath.replace('disputes', 'escalations') : undefined);
     this.escalationManager = new EscalationManager(config, escalationPath);
+
+    // Initialize package builder
+    const packagePath = packageDataPath ||
+      (dataPath.includes('test-data') ? dataPath.replace('disputes', 'packages') : undefined);
+    this.packageBuilder = new DisputePackageBuilder(config, packagePath);
 
     // Load existing disputes
     this.loadDisputes();
@@ -820,6 +828,102 @@ No automated judgment is rendered by this system.
   }
 
   /**
+   * Create a dispute package
+   */
+  public async createDisputePackage(params: {
+    disputeId: string;
+    createdBy: string;
+    options?: PackageBuildOptions;
+  }): Promise<{
+    success: boolean;
+    packageId?: string;
+    error?: string;
+  }> {
+    const dispute = this.disputes.get(params.disputeId);
+
+    if (!dispute) {
+      return {
+        success: false,
+        error: 'Dispute not found',
+      };
+    }
+
+    // Get timeline
+    const timeline = this.getDisputeTimeline(params.disputeId);
+
+    // Get evidence
+    const evidence = dispute.evidence;
+
+    // Get clarifications (if available)
+    const clarifications = this.clarificationManager
+      ? this.clarificationManager.getClarificationsForDispute(params.disputeId)
+      : [];
+
+    // Build package
+    const result = await this.packageBuilder.buildPackage({
+      dispute,
+      timeline,
+      evidence,
+      clarifications,
+      intents: [], // TODO: Fetch related intents if available
+      settlements: [], // TODO: Fetch related settlements if available
+      receipts: [], // TODO: Fetch related receipts if available
+      createdBy: params.createdBy,
+      options: params.options,
+    });
+
+    return result;
+  }
+
+  /**
+   * Export package to JSON
+   */
+  public exportPackageToJSON(packageId: string) {
+    return this.packageBuilder.exportToJSON(packageId);
+  }
+
+  /**
+   * Export package to text
+   */
+  public exportPackageToText(packageId: string) {
+    return this.packageBuilder.exportToText(packageId);
+  }
+
+  /**
+   * Get package by ID
+   */
+  public getPackage(packageId: string) {
+    return this.packageBuilder.getPackage(packageId);
+  }
+
+  /**
+   * Get packages for dispute
+   */
+  public getPackagesForDispute(disputeId: string) {
+    return this.packageBuilder.getPackagesForDispute(disputeId);
+  }
+
+  /**
+   * Verify package
+   */
+  public verifyPackage(packageId: string) {
+    const pkg = this.packageBuilder.getPackage(packageId);
+    if (!pkg) {
+      return null;
+    }
+
+    const dispute = this.disputes.get(pkg.disputeId);
+    return this.packageBuilder.verifyPackage(pkg, dispute);
+  }
+
+  /**
+   * Get package builder (for testing/advanced usage)
+   */
+  public getPackageBuilder(): DisputePackageBuilder {
+    return this.packageBuilder;
+  }
+
+  /**
    * Get statistics
    */
   public getStats(): {
@@ -830,6 +934,7 @@ No automated judgment is rendered by this system.
     evidenceStats?: ReturnType<EvidenceManager['getStats']>;
     clarificationStats?: ReturnType<ClarificationManager['getStats']>;
     escalationStats?: ReturnType<EscalationManager['getStats']>;
+    packageStats?: ReturnType<DisputePackageBuilder['getStats']>;
   } {
     const disputesByStatus: Record<DisputeStatus, number> = {
       initiated: 0,
@@ -858,6 +963,7 @@ No automated judgment is rendered by this system.
       evidenceStats: this.evidenceManager.getStats(),
       clarificationStats: this.clarificationManager?.getStats(),
       escalationStats: this.escalationManager.getStats(),
+      packageStats: this.packageBuilder.getStats(),
     };
   }
 }
