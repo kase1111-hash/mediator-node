@@ -12,6 +12,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { EvidenceManager } from './EvidenceManager';
 
 /**
  * Manages dispute declarations and lifecycle
@@ -21,8 +22,13 @@ export class DisputeManager {
   private config: MediatorConfig;
   private disputes: Map<string, DisputeDeclaration> = new Map();
   private dataPath: string;
+  private evidenceManager: EvidenceManager;
 
-  constructor(config: MediatorConfig, dataPath: string = './data/disputes') {
+  constructor(
+    config: MediatorConfig,
+    dataPath: string = './data/disputes',
+    evidenceDataPath?: string
+  ) {
     this.config = config;
     this.dataPath = dataPath;
 
@@ -30,6 +36,11 @@ export class DisputeManager {
     if (!fs.existsSync(this.dataPath)) {
       fs.mkdirSync(this.dataPath, { recursive: true });
     }
+
+    // Initialize evidence manager with matching test path if in test environment
+    const evidencePath = evidenceDataPath ||
+      (dataPath.includes('test-data') ? dataPath.replace('disputes', 'evidence') : undefined);
+    this.evidenceManager = new EvidenceManager(config, evidencePath);
 
     // Load existing disputes
     this.loadDisputes();
@@ -107,6 +118,13 @@ export class DisputeManager {
       if (!submitted) {
         logger.warn('Failed to submit dispute to chain', { disputeId });
       }
+
+      // Freeze contested items if enabled
+      await this.evidenceManager.autoFreezeIfEnabled(
+        disputeId,
+        params.contestedItems,
+        params.claimantId
+      );
 
       logger.info('Dispute initiated', {
         disputeId,
@@ -459,6 +477,129 @@ No automated judgment is rendered by this system.
   }
 
   /**
+   * Check if an item is frozen due to a dispute
+   */
+  public isItemFrozen(itemId: string): boolean {
+    return this.evidenceManager.isItemFrozen(itemId);
+  }
+
+  /**
+   * Check if an item can be mutated
+   */
+  public canMutateItem(
+    itemId: string,
+    operationType: 'update' | 'delete'
+  ): { allowed: boolean; reason?: string; disputeId?: string } {
+    return this.evidenceManager.canMutateItem(itemId, operationType);
+  }
+
+  /**
+   * Record a mutation attempt for audit purposes
+   */
+  public recordMutationAttempt(
+    itemId: string,
+    attemptedBy: string,
+    operationType: 'update' | 'delete'
+  ): void {
+    this.evidenceManager.recordMutationAttempt(
+      itemId,
+      attemptedBy,
+      operationType
+    );
+  }
+
+  /**
+   * Create an evidence snapshot for a dispute
+   */
+  public async createEvidenceSnapshot(disputeId: string) {
+    return this.evidenceManager.createEvidenceSnapshot(disputeId);
+  }
+
+  /**
+   * Resolve a dispute and unfreeze associated items
+   */
+  public async resolveDispute(
+    disputeId: string,
+    outcome: string,
+    resolvedBy: string
+  ): Promise<boolean> {
+    const dispute = this.disputes.get(disputeId);
+
+    if (!dispute) {
+      logger.warn('Dispute not found for resolution', { disputeId });
+      return false;
+    }
+
+    // Update dispute status
+    dispute.status = 'resolved';
+    dispute.updatedAt = Date.now();
+    dispute.resolution = {
+      resolutionId: nanoid(),
+      disputeId,
+      outcome: 'other',
+      outcomeDescription: outcome,
+      resolvedBy,
+      resolvedAt: Date.now(),
+      isImmutable: true,
+    };
+
+    this.saveDispute(dispute);
+
+    // Unfreeze contested items
+    const unfrozenCount = this.evidenceManager.unfreezeItemsForDispute(disputeId);
+
+    logger.info('Dispute resolved', {
+      disputeId,
+      outcome,
+      unfrozenCount,
+    });
+
+    return true;
+  }
+
+  /**
+   * Dismiss a dispute and unfreeze associated items
+   */
+  public async dismissDispute(
+    disputeId: string,
+    reason: string,
+    dismissedBy: string
+  ): Promise<boolean> {
+    const dispute = this.disputes.get(disputeId);
+
+    if (!dispute) {
+      logger.warn('Dispute not found for dismissal', { disputeId });
+      return false;
+    }
+
+    // Update dispute status
+    dispute.status = 'dismissed';
+    dispute.updatedAt = Date.now();
+    dispute.resolution = {
+      resolutionId: nanoid(),
+      disputeId,
+      outcome: 'dismissed',
+      outcomeDescription: reason,
+      resolvedBy: dismissedBy,
+      resolvedAt: Date.now(),
+      isImmutable: true,
+    };
+
+    this.saveDispute(dispute);
+
+    // Unfreeze contested items
+    const unfrozenCount = this.evidenceManager.unfreezeItemsForDispute(disputeId);
+
+    logger.info('Dispute dismissed', {
+      disputeId,
+      reason,
+      unfrozenCount,
+    });
+
+    return true;
+  }
+
+  /**
    * Get statistics
    */
   public getStats(): {
@@ -466,6 +607,7 @@ No automated judgment is rendered by this system.
     disputesByStatus: Record<DisputeStatus, number>;
     totalEvidence: number;
     averageEvidencePerDispute: number;
+    evidenceStats?: ReturnType<EvidenceManager['getStats']>;
   } {
     const disputesByStatus: Record<DisputeStatus, number> = {
       initiated: 0,
@@ -491,6 +633,7 @@ No automated judgment is rendered by this system.
         this.disputes.size > 0
           ? Math.round((totalEvidence / this.disputes.size) * 10) / 10
           : 0,
+      evidenceStats: this.evidenceManager.getStats(),
     };
   }
 }
