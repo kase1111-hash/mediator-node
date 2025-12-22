@@ -35,15 +35,17 @@ export class MediatorNode {
   constructor(config: MediatorConfig) {
     this.config = config;
 
+    // Initialize burn manager first (needed by other components)
+    this.burnManager = new BurnManager(config);
+
     // Initialize components
-    this.ingester = new IntentIngester(config);
+    this.ingester = new IntentIngester(config, this.burnManager);
     this.vectorDb = new VectorDatabase(config);
     this.llmProvider = new LLMProvider(config);
     this.settlementManager = new SettlementManager(config);
     this.reputationTracker = new ReputationTracker(config);
     this.stakeManager = new StakeManager(config);
     this.authorityManager = new AuthorityManager(config);
-    this.burnManager = new BurnManager(config);
 
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
@@ -304,5 +306,12 @@ export class MediatorNode {
    */
   public getBurnManager(): BurnManager {
     return this.burnManager;
+  }
+
+  /**
+   * Get IntentIngester instance for direct access
+   */
+  public getIntentIngester(): IntentIngester {
+    return this.ingester;
   }
 }

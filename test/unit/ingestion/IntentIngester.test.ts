@@ -12,6 +12,7 @@
 
 import { IntentIngester } from '../../../src/ingestion/IntentIngester';
 import { MediatorConfig, Intent, ConsensusMode } from '../../../src/types';
+import { BurnManager } from '../../../src/burn/BurnManager';
 import {
   VALID_INTENT_1,
   VALID_INTENT_2,
@@ -38,11 +39,30 @@ jest.mock('../../../src/utils/logger', () => ({
   },
 }));
 
+// Mock fs module for BurnManager
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  readFileSync: jest.fn(),
+  writeFileSync: jest.fn(),
+}));
+
+import * as fs from 'fs';
+const mockFs = fs as jest.Mocked<typeof fs>;
+
 describe('IntentIngester', () => {
   let config: MediatorConfig;
   let ingester: IntentIngester;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Reset fs mocks
+    mockFs.existsSync.mockReturnValue(false);
+    mockFs.mkdirSync.mockImplementation(() => undefined);
+    mockFs.readFileSync.mockReturnValue('{}');
+    mockFs.writeFileSync.mockImplementation(() => undefined);
+
     config = {
       chainEndpoint: 'http://localhost:3000',
       chainId: 'test-chain',
@@ -58,10 +78,17 @@ describe('IntentIngester', () => {
       maxIntentsCache: 100,
       acceptanceWindowHours: 72,
       logLevel: 'info',
+      // Burn configuration
+      baseFilingBurn: 10,
+      freeDailySubmissions: 1,
+      burnEscalationBase: 2,
+      burnEscalationExponent: 1,
+      successBurnPercentage: 0.05,
+      loadScalingEnabled: false,
+      maxLoadMultiplier: 10,
     };
 
     ingester = new IntentIngester(config);
-    jest.clearAllMocks();
   });
 
   afterEach(() => {
@@ -601,6 +628,214 @@ describe('IntentIngester', () => {
       // Should still only have one cached instance
       const cached = ingester.getCachedIntents();
       expect(cached).toHaveLength(1);
+    });
+  });
+
+  describe('Burn Integration', () => {
+    let burnManager: BurnManager;
+    let ingesterWithBurn: IntentIngester;
+
+    beforeEach(() => {
+      burnManager = new BurnManager(config);
+      ingesterWithBurn = new IntentIngester(config, burnManager);
+    });
+
+    describe('previewIntentBurn', () => {
+      it('should return null when BurnManager is not configured', () => {
+        const preview = ingester.previewIntentBurn('user1');
+        expect(preview).toBeNull();
+      });
+
+      it('should return burn preview when BurnManager is configured', () => {
+        const preview = ingesterWithBurn.previewIntentBurn('user1');
+
+        expect(preview).not.toBeNull();
+        expect(preview?.isFree).toBe(true);
+        expect(preview?.amount).toBe(0);
+      });
+
+      it('should calculate non-free burn for second submission', async () => {
+        mockedAxios.post.mockResolvedValue({
+          status: 200,
+          data: { transactionHash: 'tx1' },
+        });
+
+        // Execute first submission
+        await burnManager.executeFilingBurn('user1', 'intent1');
+
+        // Preview second submission
+        const preview = ingesterWithBurn.previewIntentBurn('user1');
+
+        expect(preview?.isFree).toBe(false);
+        expect(preview?.amount).toBe(20); // 10 × 2^1
+      });
+    });
+
+    describe('submitIntent', () => {
+      it('should throw error when BurnManager is not configured', async () => {
+        await expect(ingester.submitIntent({
+          author: 'user1',
+          prose: 'I need help with a TypeScript project',
+        })).rejects.toThrow('BurnManager required');
+      });
+
+      it('should throw error for invalid intent data', async () => {
+        await expect(ingesterWithBurn.submitIntent({
+          author: '',
+          prose: 'short',
+        })).rejects.toThrow('Invalid intent data');
+      });
+
+      it('should submit free intent successfully', async () => {
+        mockedAxios.post.mockResolvedValue({
+          status: 200,
+          data: { intentHash: 'hash123' },
+        });
+
+        const intent = await ingesterWithBurn.submitIntent({
+          author: 'user1',
+          prose: 'I need help with a TypeScript project that involves building a web application',
+          offeredFee: 100,
+        });
+
+        expect(intent).not.toBeNull();
+        expect(intent?.author).toBe('user1');
+        expect(intent?.prose).toContain('TypeScript project');
+        expect(intent?.status).toBe('pending');
+
+        // Verify intent was submitted to chain (not burn since it's free)
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+          'http://localhost:3000/api/v1/intents',
+          expect.objectContaining({
+            intent: expect.objectContaining({
+              author: 'user1',
+            }),
+            burnTransaction: null, // First submission is free
+          })
+        );
+      });
+
+      it('should execute burn and submit paid intent', async () => {
+        mockedAxios.post.mockResolvedValue({
+          status: 200,
+          data: { transactionHash: 'tx123' },
+        });
+
+        // First submission (free)
+        await ingesterWithBurn.submitIntent({
+          author: 'user1',
+          prose: 'First intent submission to use up free allowance for testing purposes',
+        });
+
+        // Reset mocks
+        mockedAxios.post.mockClear();
+        mockedAxios.post.mockResolvedValue({
+          status: 200,
+          data: { transactionHash: 'tx456' },
+        });
+
+        // Second submission (paid)
+        const intent = await ingesterWithBurn.submitIntent({
+          author: 'user1',
+          prose: 'Second intent submission that should require burn payment to the chain',
+          offeredFee: 200,
+        });
+
+        expect(intent).not.toBeNull();
+
+        // Verify burn was submitted to chain first
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+          'http://localhost:3000/api/v1/burns',
+          expect.objectContaining({
+            type: 'base_filing',
+            amount: 20,
+          })
+        );
+
+        // Verify intent was submitted with burn transaction
+        expect(mockedAxios.post).toHaveBeenCalledWith(
+          'http://localhost:3000/api/v1/intents',
+          expect.objectContaining({
+            intent: expect.objectContaining({
+              author: 'user1',
+            }),
+            burnTransaction: expect.objectContaining({
+              type: 'base_filing',
+              amount: 20,
+            }),
+          })
+        );
+      });
+
+      it('should cache submitted intent locally', async () => {
+        mockedAxios.post.mockResolvedValue({
+          status: 200,
+          data: {},
+        });
+
+        const intent = await ingesterWithBurn.submitIntent({
+          author: 'user1',
+          prose: 'Test intent for local caching after submission to the chain',
+        });
+
+        expect(intent).not.toBeNull();
+
+        // Verify intent was cached
+        const cached = ingesterWithBurn.getIntent(intent!.hash);
+        expect(cached).toBeDefined();
+        expect(cached?.author).toBe('user1');
+      });
+
+      it('should extract desires and constraints if not provided', async () => {
+        mockedAxios.post.mockResolvedValue({
+          status: 200,
+          data: {},
+        });
+
+        const intent = await ingesterWithBurn.submitIntent({
+          author: 'user1',
+          prose: 'I need help with a project. It must be completed by Friday.',
+        });
+
+        expect(intent).not.toBeNull();
+        expect(intent?.desires.length).toBeGreaterThan(0);
+        expect(intent?.constraints.length).toBeGreaterThan(0);
+      });
+
+      it('should handle burn execution failure', async () => {
+        // First submission (free) - succeeds
+        mockedAxios.post.mockResolvedValueOnce({
+          status: 200,
+          data: {},
+        });
+
+        await ingesterWithBurn.submitIntent({
+          author: 'user1',
+          prose: 'First submission to use up free allowance before testing failure',
+        });
+
+        // Second submission - burn fails
+        mockedAxios.post.mockRejectedValueOnce(new Error('Burn failed'));
+
+        await expect(ingesterWithBurn.submitIntent({
+          author: 'user1',
+          prose: 'Second submission that should fail due to burn execution failure',
+        })).rejects.toThrow('Burn failed');
+      });
+
+      it('should handle chain submission failure', async () => {
+        mockedAxios.post.mockResolvedValueOnce({
+          status: 500,
+          data: { error: 'Internal server error' },
+        });
+
+        const intent = await ingesterWithBurn.submitIntent({
+          author: 'user1',
+          prose: 'Intent submission that will fail due to chain error for testing',
+        });
+
+        expect(intent).toBeNull();
+      });
     });
   });
 });
