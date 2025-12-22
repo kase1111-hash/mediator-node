@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { logger } from '../utils/logger';
 import { AuthenticationService } from './AuthenticationService';
+import { WebSocketMessageSchema, AuthenticationMessageSchema } from '../validation/schemas';
 
 /**
  * Configuration for WebSocket server
@@ -404,7 +405,7 @@ export class WebSocketServer {
   }
 
   /**
-   * Handle incoming message from client
+   * Handle incoming message from client with validation and size limits
    */
   private handleMessage(connectionId: string, data: Buffer): void {
     const connection = this.connections.get(connectionId);
@@ -415,11 +416,52 @@ export class WebSocketServer {
     connection.lastActivity = Date.now();
 
     try {
-      const message = JSON.parse(data.toString());
+      // SECURITY: Enforce message size limit (100 KB)
+      const MAX_MESSAGE_SIZE = 100 * 1024;
+      if (data.length > MAX_MESSAGE_SIZE) {
+        logger.warn('Message too large', {
+          connectionId,
+          size: data.length,
+          maxSize: MAX_MESSAGE_SIZE,
+        });
+        this.send(connectionId, {
+          type: 'system.node_status_changed' as WebSocketEventType,
+          timestamp: Date.now(),
+          eventId: this.generateEventId(),
+          version: '1.0',
+          payload: {
+            success: false,
+            error: `Message too large (${data.length} bytes, max ${MAX_MESSAGE_SIZE})`,
+          },
+        });
+        return;
+      }
 
-      // Handle authentication
-      if (message.action === 'authenticate') {
-        this.handleAuthentication(connectionId, message as AuthenticationMessage);
+      // Parse JSON
+      const rawMessage = JSON.parse(data.toString());
+
+      // Handle authentication (special case - different schema)
+      if (rawMessage.action === 'authenticate') {
+        // Validate authentication message
+        const authResult = AuthenticationMessageSchema.safeParse(rawMessage);
+        if (!authResult.success) {
+          logger.warn('Invalid authentication message', {
+            connectionId,
+            errors: authResult.error.errors,
+          });
+          this.send(connectionId, {
+            type: 'system.node_status_changed' as WebSocketEventType,
+            timestamp: Date.now(),
+            eventId: this.generateEventId(),
+            version: '1.0',
+            payload: {
+              success: false,
+              error: 'Invalid authentication message format',
+            },
+          });
+          return;
+        }
+        this.handleAuthentication(connectionId, authResult.data as AuthenticationMessage);
         return;
       }
 
@@ -439,21 +481,93 @@ export class WebSocketServer {
         return;
       }
 
-      // Handle subscription management
-      if (message.action === 'subscribe' || message.action === 'unsubscribe' || message.action === 'update') {
-        this.handleSubscription(connectionId, message as SubscriptionRequest);
+      // SECURITY: Validate message schema for subscription messages
+      if (rawMessage.type === 'subscribe' || rawMessage.type === 'unsubscribe' || rawMessage.type === 'ping') {
+        const validationResult = WebSocketMessageSchema.safeParse(rawMessage);
+        if (!validationResult.success) {
+          logger.warn('Invalid message format', {
+            connectionId,
+            messageType: rawMessage.type,
+            errors: validationResult.error.errors,
+          });
+          this.send(connectionId, {
+            type: 'system.node_status_changed' as WebSocketEventType,
+            timestamp: Date.now(),
+            eventId: this.generateEventId(),
+            version: '1.0',
+            payload: {
+              success: false,
+              error: `Invalid message format: ${validationResult.error.errors[0].message}`,
+            },
+          });
+          return;
+        }
+
+        const message = validationResult.data;
+
+        // Handle ping
+        if (message.type === 'ping') {
+          this.send(connectionId, {
+            type: 'system.node_status_changed' as WebSocketEventType,
+            timestamp: Date.now(),
+            eventId: this.generateEventId(),
+            version: '1.0',
+            payload: {
+              type: 'pong',
+              timestamp: Date.now(),
+            },
+          });
+          return;
+        }
+
+        // Handle subscription management
+        if (message.type === 'subscribe' || message.type === 'unsubscribe') {
+          // Convert to legacy format for handleSubscription
+          const legacyMessage = {
+            action: message.type,
+            channels: message.channels,
+            filters: 'filters' in message ? message.filters : undefined,
+          };
+          this.handleSubscription(connectionId, legacyMessage as SubscriptionRequest);
+          return;
+        }
+      }
+
+      // Handle legacy format for backward compatibility
+      if (rawMessage.action === 'subscribe' || rawMessage.action === 'unsubscribe' || rawMessage.action === 'update') {
+        this.handleSubscription(connectionId, rawMessage as SubscriptionRequest);
         return;
       }
 
       // Unknown message type
       logger.warn('Unknown message type', {
         connectionId,
-        action: message.action,
+        messageType: rawMessage.type || rawMessage.action,
+      });
+      this.send(connectionId, {
+        type: 'system.node_status_changed' as WebSocketEventType,
+        timestamp: Date.now(),
+        eventId: this.generateEventId(),
+        version: '1.0',
+        payload: {
+          success: false,
+          error: 'Unknown message type',
+        },
       });
     } catch (err: any) {
-      logger.error('Failed to parse message', {
+      logger.error('Failed to parse or validate message', {
         connectionId,
         error: err.message,
+      });
+      this.send(connectionId, {
+        type: 'system.node_status_changed' as WebSocketEventType,
+        timestamp: Date.now(),
+        eventId: this.generateEventId(),
+        version: '1.0',
+        payload: {
+          success: false,
+          error: 'Message parsing failed',
+        },
       });
     }
   }
