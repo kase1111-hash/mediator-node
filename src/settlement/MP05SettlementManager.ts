@@ -659,6 +659,9 @@ export class MP05SettlementManager {
    * Save settlement to disk
    */
   private saveSettlement(settlement: Settlement): void {
+    if (!fs.existsSync(this.dataPath)) {
+      fs.mkdirSync(this.dataPath, { recursive: true });
+    }
     const filePath = path.join(this.dataPath, `${settlement.settlementId}.json`);
     try {
       fs.writeFileSync(filePath, JSON.stringify(settlement, null, 2));
@@ -674,6 +677,9 @@ export class MP05SettlementManager {
    * Save risk to disk
    */
   private saveRisk(risk: SettlementRisk): void {
+    if (!fs.existsSync(this.risksPath)) {
+      fs.mkdirSync(this.risksPath, { recursive: true });
+    }
     const filePath = path.join(this.risksPath, `${risk.riskId}.json`);
     try {
       fs.writeFileSync(filePath, JSON.stringify(risk, null, 2));

@@ -756,16 +756,25 @@ export class MP05CapitalizationManager {
   }
 
   private saveEvent(event: CapitalizationEvent): void {
+    if (!fs.existsSync(this.eventsPath)) {
+      fs.mkdirSync(this.eventsPath, { recursive: true });
+    }
     const filePath = path.join(this.eventsPath, `${event.eventId}.json`);
     fs.writeFileSync(filePath, JSON.stringify(event, null, 2));
   }
 
   private saveInterface(iface: CapitalizationInterface): void {
+    if (!fs.existsSync(this.interfacesPath)) {
+      fs.mkdirSync(this.interfacesPath, { recursive: true });
+    }
     const filePath = path.join(this.interfacesPath, `${iface.interfaceId}.json`);
     fs.writeFileSync(filePath, JSON.stringify(iface, null, 2));
   }
 
   private saveExecutionMetadata(metadata: ExecutionMetadata): void {
+    if (!fs.existsSync(this.executionPath)) {
+      fs.mkdirSync(this.executionPath, { recursive: true });
+    }
     const filePath = path.join(this.executionPath, `${metadata.eventId}.json`);
     fs.writeFileSync(filePath, JSON.stringify(metadata, null, 2));
   }
