@@ -17,6 +17,7 @@ import { SpamProofDetector } from './sybil/SpamProofDetector';
 import { EffortCaptureSystem } from './effort/EffortCaptureSystem';
 import { DisputeManager } from './dispute/DisputeManager';
 import { LicensingManager } from './licensing/LicensingManager';
+import { MP05SettlementCoordinator } from './settlement/MP05SettlementCoordinator';
 import { logger } from './utils/logger';
 
 /**
@@ -46,6 +47,7 @@ export class MediatorNode {
   private effortCaptureSystem?: EffortCaptureSystem;
   private disputeManager?: DisputeManager;
   private licensingManager?: LicensingManager;
+  private mp05Coordinator?: MP05SettlementCoordinator;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -104,6 +106,17 @@ export class MediatorNode {
       this.licensingManager = new LicensingManager(config);
     }
 
+    // Initialize Settlement & Capitalization system (MP-05)
+    if (config.enableSettlementSystem) {
+      this.mp05Coordinator = new MP05SettlementCoordinator(
+        config,
+        './data/mp05',
+        this.effortCaptureSystem,
+        this.disputeManager,
+        this.licensingManager
+      );
+    }
+
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
       consensusMode: config.consensusMode,
@@ -112,6 +125,8 @@ export class MediatorNode {
       sybilResistanceEnabled: config.enableSybilResistance || false,
       effortCaptureEnabled: config.enableEffortCapture || false,
       disputeSystemEnabled: config.enableDisputeSystem || false,
+      licensingSystemEnabled: config.enableLicensingSystem || false,
+      settlementSystemEnabled: config.enableSettlementSystem || false,
     });
   }
 
@@ -869,5 +884,12 @@ export class MediatorNode {
    */
   public getLicensingManager(): LicensingManager | undefined {
     return this.licensingManager;
+  }
+
+  /**
+   * Get MP05SettlementCoordinator instance for direct access
+   */
+  public getMP05Coordinator(): MP05SettlementCoordinator | undefined {
+    return this.mp05Coordinator;
   }
 }
