@@ -131,7 +131,8 @@ export interface GovernanceProposal {
   parameters?: Record<string, any>;
   votingPeriodEnd: number;
   executionDelay: number;
-  status: 'voting' | 'passed' | 'rejected' | 'executed';
+  executionTime?: number; // When proposal can be executed (after delay)
+  status: 'voting' | 'passed' | 'rejected' | 'executed' | 'expired';
   votes: {
     for: number;
     against: number;
@@ -139,6 +140,100 @@ export interface GovernanceProposal {
   };
   quorumRequired: number;
   timestamp: number;
+  prose?: string; // Prose description for chain submission
+}
+
+/**
+ * Individual vote cast by a mediator
+ */
+export interface GovernanceVote {
+  id: string;
+  proposalId: string;
+  voterId: string;
+  voteType: 'for' | 'against' | 'abstain';
+  votingPower: number; // Stake-weighted voting power
+  timestamp: number;
+  signature?: string;
+}
+
+/**
+ * Governance configuration
+ */
+export interface GovernanceConfig {
+  votingPeriodDays: number; // Default: 7 days
+  executionDelayDays: number; // Default: 3 days
+  quorumPercentage: number; // Default: 30%
+  approvalThreshold: number; // Default: 50% (simple majority)
+  proposalSubmissionMinStake?: number; // Minimum stake to submit proposal
+}
+
+/**
+ * Governance proposal submission result
+ */
+export interface GovernanceProposalSubmissionResult {
+  success: boolean;
+  proposalId?: string;
+  error?: string;
+  timestamp: number;
+}
+
+/**
+ * Governance vote submission result
+ */
+export interface GovernanceVoteSubmissionResult {
+  success: boolean;
+  voteId?: string;
+  error?: string;
+  timestamp: number;
+}
+
+/**
+ * Governable parameters
+ */
+export interface GovernableParameters {
+  // DPoS parameters
+  dposActiveSlots?: number;
+  dposMinimumStake?: number;
+  dposRotationPeriodHours?: number;
+  dposSlashingPercentage?: number;
+
+  // Fee parameters
+  facilitationFeePercent?: number;
+  minimumFacilitationFee?: number;
+
+  // Challenge parameters
+  challengeWindow?: number;
+  minConfidenceToChallenge?: number;
+
+  // Acceptance parameters
+  acceptanceWindowHours?: number;
+
+  // Semantic consensus parameters
+  semanticConsensusMinMediators?: number;
+  semanticConsensusTimeoutMs?: number;
+
+  // Reputation parameters
+  closuresWeight?: number;
+  challengesUpheldWeight?: number;
+  challengesFailedPenalty?: number;
+  forfeituresWeight?: number;
+
+  // Monitoring parameters
+  monitoringHealthCheckInterval?: number;
+  monitoringMetricsInterval?: number;
+  monitoringHighLatencyThreshold?: number;
+  monitoringHighErrorRateThreshold?: number;
+  monitoringHighMemoryThreshold?: number;
+
+  // Burn parameters
+  baseBurnAmount?: number;
+  successBurnAmount?: number;
+  dailyFreeIntentAllowance?: number;
+  perUserExponentBase?: number;
+  loadMonitoringInterval?: number;
+
+  // Consensus mode
+  consensusMode?: 'permissionless' | 'dpos' | 'poa' | 'hybrid';
 }
 
 /**
@@ -288,6 +383,15 @@ export interface MediatorConfig {
   monitoringHighLatencyThreshold?: number; // High latency alert threshold in ms (default: 1000)
   monitoringHighErrorRateThreshold?: number; // High error rate threshold per minute (default: 10)
   monitoringHighMemoryThreshold?: number; // High memory usage threshold percentage (default: 90)
+
+  // Governance configuration
+  enableGovernance?: boolean; // Enable on-chain governance system (default: false)
+  governanceVotingPeriodDays?: number; // Voting period for proposals in days (default: 7)
+  governanceExecutionDelayDays?: number; // Execution delay after approval in days (default: 3)
+  governanceQuorumPercentage?: number; // Quorum required for proposal validity (default: 30)
+  governanceApprovalThreshold?: number; // Approval threshold percentage (default: 50)
+  governanceProposalMinStake?: number; // Minimum stake to submit proposals (default: 1000)
+  governanceMonitoringInterval?: number; // Proposal monitoring interval in ms (default: 3600000 - 1 hour)
 
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
