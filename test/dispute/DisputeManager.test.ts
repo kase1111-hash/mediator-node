@@ -20,7 +20,7 @@ describe('DisputeManager', () => {
       allowDisputeClarification: true,
     } as MediatorConfig;
 
-    disputeManager = new DisputeManager(config, testDataPath);
+    disputeManager = new DisputeManager(config, undefined, testDataPath);
 
     // Mock axios responses
     mockedAxios.post.mockResolvedValue({ status: 201, data: {} });
@@ -595,7 +595,7 @@ describe('DisputeManager', () => {
       });
 
       // Create new instance to test loading
-      const newManager = new DisputeManager(config, testDataPath);
+      const newManager = new DisputeManager(config, undefined, testDataPath);
 
       const dispute = newManager.getDispute(result.disputeId!);
       expect(dispute).toBeDefined();

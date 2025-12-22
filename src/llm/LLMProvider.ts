@@ -281,4 +281,43 @@ Provide a 2-3 sentence summary of the essential agreement in plain language.`;
       return 'Error generating summary';
     }
   }
+
+  /**
+   * Generate text response from a prompt (general purpose)
+   */
+  public async generateText(params: {
+    prompt: string;
+    maxTokens?: number;
+    temperature?: number;
+  }): Promise<string> {
+    const { prompt, maxTokens = 2048, temperature = 0.7 } = params;
+
+    try {
+      if (this.config.llmProvider === 'anthropic' && this.anthropic) {
+        const result = await this.anthropic.messages.create({
+          model: this.config.llmModel,
+          max_tokens: maxTokens,
+          temperature,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        const content = result.content[0];
+        return content.type === 'text' ? content.text : '';
+      } else if (this.config.llmProvider === 'openai' && this.openai) {
+        const result = await this.openai.chat.completions.create({
+          model: this.config.llmModel,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+          temperature,
+        });
+
+        return result.choices[0].message.content || '';
+      }
+
+      return 'Text generation not available';
+    } catch (error) {
+      logger.error('Error generating text', { error });
+      throw error;
+    }
+  }
 }
