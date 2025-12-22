@@ -11,6 +11,7 @@ import { BurnManager } from './burn/BurnManager';
 import { LoadMonitor } from './burn/LoadMonitor';
 import { ChallengeDetector } from './challenge/ChallengeDetector';
 import { ChallengeManager } from './challenge/ChallengeManager';
+import { SemanticConsensusManager } from './consensus/SemanticConsensusManager';
 import { logger } from './utils/logger';
 
 /**
@@ -34,6 +35,7 @@ export class MediatorNode {
   private loadMonitor: LoadMonitor;
   private challengeDetector: ChallengeDetector;
   private challengeManager: ChallengeManager;
+  private semanticConsensusManager: SemanticConsensusManager;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -52,10 +54,22 @@ export class MediatorNode {
     this.ingester = new IntentIngester(config, this.burnManager);
     this.vectorDb = new VectorDatabase(config);
     this.llmProvider = new LLMProvider(config);
-    this.settlementManager = new SettlementManager(config, this.burnManager);
     this.reputationTracker = new ReputationTracker(config);
     this.stakeManager = new StakeManager(config);
     this.authorityManager = new AuthorityManager(config);
+
+    // Initialize semantic consensus system (MP-01)
+    this.semanticConsensusManager = new SemanticConsensusManager(
+      config,
+      this.llmProvider
+    );
+
+    // Initialize settlement manager with semantic consensus support
+    this.settlementManager = new SettlementManager(
+      config,
+      this.burnManager,
+      this.semanticConsensusManager
+    );
 
     // Initialize challenge system
     this.challengeDetector = new ChallengeDetector(config, this.llmProvider);
@@ -65,6 +79,7 @@ export class MediatorNode {
       mediatorId: config.mediatorPublicKey,
       consensusMode: config.consensusMode,
       challengeSubmissionEnabled: config.enableChallengeSubmission || false,
+      semanticConsensusEnabled: config.enableSemanticConsensus || false,
     });
   }
 
@@ -121,6 +136,11 @@ export class MediatorNode {
         this.startChallengeMonitoring();
       }
 
+      // Start semantic consensus monitoring if enabled
+      if (this.config.enableSemanticConsensus) {
+        this.startSemanticConsensusMonitoring();
+      }
+
       // Start load monitoring if enabled
       if (this.config.loadScalingEnabled) {
         const interval = this.config.loadMonitoringInterval || 30000;
@@ -132,6 +152,7 @@ export class MediatorNode {
         effectiveStake: this.stakeManager.getEffectiveStake(),
         loadScaling: this.config.loadScalingEnabled || false,
         challengeSubmission: this.config.enableChallengeSubmission || false,
+        semanticConsensus: this.config.enableSemanticConsensus || false,
       });
     } catch (error) {
       logger.error('Error starting mediator node', { error });
@@ -399,6 +420,96 @@ export class MediatorNode {
   }
 
   /**
+   * Start semantic consensus verification monitoring
+   * Monitors for incoming verification requests and processes them
+   */
+  private startSemanticConsensusMonitoring(): void {
+    // Monitor for incoming verification requests
+    setInterval(async () => {
+      if (!this.isRunning) return;
+
+      await this.checkForVerificationRequests();
+    }, 60000); // Check every minute
+
+    // Monitor ongoing verifications for timeout/completion
+    setInterval(async () => {
+      if (!this.isRunning) return;
+
+      await this.semanticConsensusManager.checkVerificationTimeouts();
+    }, 60000); // Check every minute
+  }
+
+  /**
+   * Check for incoming verification requests and respond if configured
+   */
+  private async checkForVerificationRequests(): Promise<void> {
+    if (!this.config.participateInVerification) {
+      return; // Not participating as a verifier
+    }
+
+    try {
+      // Fetch pending verification requests from the chain
+      const response = await axios.get(
+        `${this.config.chainEndpoint}/api/v1/verification-requests/pending`
+      );
+
+      if (!response.data || !Array.isArray(response.data.requests)) {
+        return;
+      }
+
+      const requests = response.data.requests.filter(
+        (req: any) =>
+          req.selectedVerifiers.includes(this.config.mediatorPublicKey) &&
+          req.requesterId !== this.config.mediatorPublicKey
+      );
+
+      logger.debug('Checking verification requests', { count: requests.length });
+
+      for (const request of requests) {
+        // Check if we've already responded
+        const existingResponse = await this.semanticConsensusManager.hasResponded(
+          request.settlementId
+        );
+
+        if (existingResponse) {
+          continue; // Already responded
+        }
+
+        // Fetch the settlement details
+        const settlementResponse = await axios.get(
+          `${this.config.chainEndpoint}/api/v1/settlements/${request.settlementId}`
+        );
+
+        if (!settlementResponse.data) {
+          continue;
+        }
+
+        const settlement = settlementResponse.data;
+
+        // Submit our verification response
+        try {
+          await this.semanticConsensusManager.submitVerificationResponse(
+            request,
+            settlement
+          );
+
+          logger.info('Submitted verification response', {
+            settlementId: request.settlementId,
+            requesterId: request.requesterId,
+          });
+        } catch (error) {
+          logger.error('Failed to submit verification response', {
+            error,
+            settlementId: request.settlementId,
+          });
+        }
+      }
+    } catch (error) {
+      logger.error('Error checking for verification requests', { error });
+    }
+  }
+
+  /**
    * Cleanup old embeddings from cache
    */
   private cleanupEmbeddingCache(): void {
@@ -441,6 +552,14 @@ export class MediatorNode {
       rejected: number;
       successRate: number;
     };
+    verificationStats?: {
+      total: number;
+      pending: number;
+      inProgress: number;
+      consensusReached: number;
+      consensusFailed: number;
+      timedOut: number;
+    };
   } {
     const burnStats = this.burnManager.getBurnStats();
     const status: any = {
@@ -471,6 +590,11 @@ export class MediatorNode {
     // Include challenge stats if submission is enabled
     if (this.config.enableChallengeSubmission) {
       status.challengeStats = this.challengeManager.getChallengeStats();
+    }
+
+    // Include verification stats if semantic consensus is enabled
+    if (this.config.enableSemanticConsensus) {
+      status.verificationStats = this.semanticConsensusManager.getVerificationStats();
     }
 
     return status;
@@ -530,5 +654,12 @@ export class MediatorNode {
    */
   public getChallengeManager(): ChallengeManager {
     return this.challengeManager;
+  }
+
+  /**
+   * Get SemanticConsensusManager instance for direct access
+   */
+  public getSemanticConsensusManager(): SemanticConsensusManager {
+    return this.semanticConsensusManager;
   }
 }

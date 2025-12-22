@@ -73,7 +73,7 @@ export class SemanticConsensusManager {
    */
   public async initiateVerification(
     settlement: ProposedSettlement
-  ): Promise<VerificationRequest> {
+  ): Promise<SemanticVerification> {
     try {
       logger.info('Initiating semantic consensus verification', {
         settlementId: settlement.id,
@@ -121,7 +121,7 @@ export class SemanticConsensusManager {
       // Track the verification
       const verification: SemanticVerification = {
         settlementId: settlement.id,
-        status: 'in_progress',
+        status: 'pending',
         request,
         responses: [],
         equivalenceResults: [],
@@ -138,7 +138,7 @@ export class SemanticConsensusManager {
         deadline: new Date(request.responseDeadline).toISOString(),
       });
 
-      return request;
+      return verification;
     } catch (error) {
       logger.error('Error initiating verification', { error, settlementId: settlement.id });
       throw error;
@@ -324,7 +324,7 @@ export class SemanticConsensusManager {
       );
 
       // Submit response to chain
-      await this.submitVerificationResponse(response);
+      await this.submitResponseToChain(response);
 
       logger.info('Verification response submitted', {
         settlementId: request.settlementId,
@@ -450,7 +450,7 @@ Return ONLY the JSON object, no additional text.`;
   /**
    * Submit verification response to chain
    */
-  private async submitVerificationResponse(response: VerificationResponse): Promise<void> {
+  private async submitResponseToChain(response: VerificationResponse): Promise<void> {
     try {
       await axios.post(
         `${this.config.chainEndpoint}/api/v1/verifications/${response.settlementId}/responses`,
@@ -668,9 +668,100 @@ Return ONLY the JSON object, no additional text.`;
   }
 
   /**
+   * Get verification for a settlement (alias for getVerificationStatus)
+   */
+  public getVerification(settlementId: string): SemanticVerification | null {
+    return this.getVerificationStatus(settlementId);
+  }
+
+  /**
+   * Submit verification response for a request (test-friendly wrapper)
+   */
+  public async submitVerificationResponse(
+    request: VerificationRequest,
+    settlement: ProposedSettlement
+  ): Promise<VerificationResponse> {
+    // Fetch the intents
+    const [intentAResponse, intentBResponse] = await Promise.all([
+      axios.get(`${this.config.chainEndpoint}/api/v1/intents/${request.intentHashA}`),
+      axios.get(`${this.config.chainEndpoint}/api/v1/intents/${request.intentHashB}`),
+    ]);
+
+    const intentA = intentAResponse.data;
+    const intentB = intentBResponse.data;
+
+    const response = await this.handleVerificationRequest(request, intentA, intentB);
+
+    if (!response) {
+      throw new Error('Failed to generate verification response');
+    }
+
+    return response;
+  }
+
+  /**
+   * Check if we have already responded to a verification request
+   */
+  public async hasResponded(settlementId: string): Promise<boolean> {
+    return this.pendingRequests.has(settlementId);
+  }
+
+  /**
    * Get all active verifications
    */
   public getActiveVerifications(): SemanticVerification[] {
     return Array.from(this.activeVerifications.values());
+  }
+
+  /**
+   * Get verification statistics
+   */
+  public getVerificationStats(): {
+    total: number;
+    pending: number;
+    inProgress: number;
+    consensusReached: number;
+    consensusFailed: number;
+    timedOut: number;
+  } {
+    const verifications = this.getActiveVerifications();
+
+    return {
+      total: verifications.length,
+      pending: verifications.filter(v => v.status === 'pending').length,
+      inProgress: verifications.filter(v => v.status === 'in_progress').length,
+      consensusReached: verifications.filter(v => v.status === 'consensus_reached').length,
+      consensusFailed: verifications.filter(v => v.status === 'consensus_failed').length,
+      timedOut: verifications.filter(v => v.status === 'timeout').length,
+    };
+  }
+
+  /**
+   * Check for verification timeouts and mark expired verifications
+   */
+  public async checkVerificationTimeouts(): Promise<void> {
+    const now = Date.now();
+
+    for (const [settlementId, verification] of this.activeVerifications.entries()) {
+      // Skip if already resolved
+      if (
+        verification.status === 'consensus_reached' ||
+        verification.status === 'consensus_failed' ||
+        verification.status === 'timeout'
+      ) {
+        continue;
+      }
+
+      // Check if deadline has passed
+      if (verification.request.responseDeadline < now) {
+        logger.warn('Verification deadline expired', {
+          settlementId,
+          deadline: new Date(verification.request.responseDeadline).toISOString(),
+        });
+
+        verification.status = 'timeout';
+        verification.completedAt = now;
+      }
+    }
   }
 }
