@@ -96,7 +96,7 @@ describe('Burn Workflow Integration', () => {
       freeDailySubmissions: 1,
       burnEscalationBase: 2,
       burnEscalationExponent: 1,
-      successBurnPercentage: 0.05,
+      successBurnPercentage: 0.0005, // 0.05% as decimal
       loadScalingEnabled: false,
       maxLoadMultiplier: 10,
     };

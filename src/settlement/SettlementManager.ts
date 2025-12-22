@@ -9,6 +9,7 @@ import {
 } from '../types';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';
+import { BurnManager } from '../burn/BurnManager';
 
 /**
  * SettlementManager handles the creation and submission of proposed settlements
@@ -16,9 +17,11 @@ import { generateSignature } from '../utils/crypto';
 export class SettlementManager {
   private config: MediatorConfig;
   private activeSettlements: Map<string, ProposedSettlement> = new Map();
+  private burnManager: BurnManager | null = null;
 
-  constructor(config: MediatorConfig) {
+  constructor(config: MediatorConfig, burnManager?: BurnManager) {
     this.config = config;
+    this.burnManager = burnManager || null;
   }
 
   /**
@@ -208,6 +211,36 @@ Acceptance Deadline: ${new Date(settlement.acceptanceDeadline).toISOString()}
         });
         settlement.status = 'rejected';
         return;
+      }
+
+      // Execute success burn (MP-06 Phase 5)
+      // Calculate total settlement value from facilitation fee
+      const settlementValue = settlement.facilitationFeePercent > 0
+        ? settlement.facilitationFee / (settlement.facilitationFeePercent / 100)
+        : 0;
+
+      if (this.burnManager && settlementValue > 0) {
+        try {
+          const burnResult = await this.burnManager.executeSuccessBurn(
+            settlement.id,
+            settlementValue,
+            this.config.mediatorPublicKey
+          );
+
+          if (burnResult) {
+            logger.info('Success burn executed for settlement closure', {
+              settlementId: settlement.id,
+              settlementValue,
+              burnAmount: burnResult.amount,
+            });
+          }
+        } catch (burnError) {
+          logger.error('Error executing success burn', {
+            error: burnError,
+            settlementId: settlement.id,
+          });
+          // Don't fail settlement closure due to burn errors
+        }
       }
 
       // Create payout entry
