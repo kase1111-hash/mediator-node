@@ -589,86 +589,297 @@ Testing:
 
 ---
 
-### 4. Sybil Resistance & Posting Limits
+### 4. Behavioral Pressure Shaping & Anti-Entropy Controls
 
 **Status**: Not implemented
-**Priority**: MEDIUM
-**Specification References**: Section 8 (Anti-Spam & Posting Limits)
+**Priority**: HIGH
+**Feature Class**: Semantic Rate Control & Deflationary Moderation
+**Specification References**: MP-06 (Behavioral Pressure Specification)
 
 **Description**:
-The specification defines daily posting limits (3 free intents per identity, deposits for excess) but the mediator node does not enforce or track these limits.
+A comprehensive economic framework for preventing spam, encouraging thoughtful participation, and creating deflationary pressure through value-backed assertions. This system replaces traditional computational proof-of-work with semantic proof-of-commitment, where all submissions require destroying value to assert intent.
 
-**Required Components**:
-- Per-identity posting counter
-- Daily limit enforcement
-- Excess deposit calculation
-- Spam proof submission
-- Deposit forfeiture mechanism
-- 30-day refund tracking
+**Core Philosophy**: The system does not ask "Can you pay?" but rather "Is this intent worth destroying value to assert?"
 
-**Implementation Plan**:
+---
+
+#### 4.1 Intent Filing Fee (Base Burn)
+
+**Feature Name**: Semantic Filing Fee
+**Category**: Anti-Spam / Value Sink
+**Status**: Core
+
+**Description**:
+Each intent or contract submission incurs a base burn fee, permanently removing a small quantity of tokens from circulation.
+
+**Purpose**:
+- Establishes a minimum seriousness threshold
+- Converts spam into irreversible value destruction
+- Creates a psychological pause before posting
+
+**Mechanics**:
+- Flat burn amount per submission
+- Burned tokens are unrecoverable
+- Applies to all non-free submissions
+
+**Design Notes**:
+- Acts as constant "gravity"
+- Not designed to throttle throughput on its own
+- Tuned to be negligible for legitimate users
+
+---
+
+#### 4.2 Daily Free Submission Allowance
+
+**Feature Name**: Daily Scarcity Floor
+**Category**: Fairness / Accessibility
+**Status**: Core
+
+**Description**:
+Each identity is granted one free intent or contract submission per 24-hour period.
+
+**Purpose**:
+- Preserves accessibility for casual and new users
+- Prevents paywall perception
+- Establishes legitimacy and fairness
+
+**Mechanics**:
+- Reset interval: rolling 24h (per identity)
+- Free submissions bypass base burn
+- Allowance is non-transferable and non-stackable
+
+**Design Notes**:
+- Anchors the system against elitism
+- Encourages thoughtful daily participation
+- Serves as a reference point for exponential escalation
+
+---
+
+#### 4.3 Per-User Exponential Burn Escalation
+
+**Feature Name**: Cognitive Compression Pressure
+**Category**: Quality Enforcement
+**Status**: Core
+
+**Description**:
+After the daily free submission, each additional submission by the same user incurs an exponentially increasing burn.
+
+**Purpose**:
+- Strongly discourages spam and compulsive posting
+- Encourages intent bundling and prioritization
+- Improves average semantic density of submissions
+
+**Mechanics (Illustrative)**:
+
+| Submission Count (Daily) | Burn Multiplier |
+|--------------------------|-----------------|
+| 1st                      | Free            |
+| 2nd                      | Base × 1        |
+| 3rd                      | Base × 2        |
+| 4th                      | Base × 4        |
+| 5th+                     | Base × 8+       |
+
+- Resets daily per identity
+- Applies before global load scaling
+
+**Design Notes**:
+- Asymmetrically punishes abuse
+- Barely impacts normal users
+- Forces "Is this worth it?" evaluation
+
+---
+
+#### 4.4 Global Load-Scaled Burn Multiplier
+
+**Feature Name**: Systemic Congestion Stabilizer
+**Category**: Infrastructure Protection
+**Status**: Core
+
+**Description**:
+All burns are multiplied by a dynamic congestion factor based on real-time system load.
+
+**Purpose**:
+- Automatically throttles usage during spikes
+- Prevents coordinated floods and DoS-style attacks
+- Aligns demand with available capacity
+
+**Mechanics**:
+- Load signal sources:
+  - Pending intent queue depth
+  - CPU / compute utilization
+  - Mediation backlog
+- Multiplier increases smoothly with congestion
+- Applies uniformly to all users
+
+**Design Notes**:
+- Inspired by EIP-1559 base fee dynamics
+- Impersonal and non-discretionary
+- Converts popularity into deflation
+
+---
+
+#### 4.5 Successful Mediation Burn (Optional)
+
+**Feature Name**: Coordination Success Sink
+**Category**: Value Accrual
+**Status**: Optional / Recommended
+
+**Description**:
+A small symbolic burn is applied when an intent or contract successfully resolves.
+
+**Purpose**:
+- Ties value accrual directly to real coordination
+- Reinforces legitimacy of successful mediation
+- Aligns system value with outcomes, not activity alone
+
+**Mechanics**:
+- Very small burn percentage (e.g., 0.05–0.1%)
+- Only applied on successful resolution
+- Independent of posting fees
+
+**Design Notes**:
+- Symbolic, not extractive
+- Reinforces long-term holding incentives
+- Makes success itself deflationary
+
+---
+
+#### 4.6 Semantic Proof-of-Work Model
+
+**Feature Name**: Value-Backed Assertion
+**Category**: Conceptual / Cross-Cutting
+**Status**: Foundational
+
+**Description**:
+All submissions require the author to destroy value to assert intent, replacing computational proof-of-work with semantic proof-of-commitment.
+
+**Key Principle**:
+The system does not ask "Can you pay?" but rather "Is this intent worth destroying value to assert?"
+
+**Design Notes**:
+- Applies uniformly across all pressure layers
+- Central to the system's moderation philosophy
+- Requires no human moderation intervention
+
+---
+
+#### Emergent System Properties
+
+**Behavioral Outcomes**:
+- Spam collapses exponentially
+- Thoughtfulness increases structurally
+- Power users self-regulate activity
+- Casual users remain unaffected
+
+**Economic Outcomes**:
+- Supply deflates in proportion to real usage
+- Value accrues to coordination, not noise
+- Speculation is secondary to participation
+
+**Security Outcomes**:
+- Graceful degradation under attack
+- No single spam vector dominates
+- No governance intervention required
+
+---
+
+#### Pressure Topology Summary
+
+| Pressure Type           | Feature                          |
+|-------------------------|----------------------------------|
+| Gravity                 | Base Filing Burn                 |
+| Scarcity                | Daily Free Allowance             |
+| Cognitive Compression   | Exponential Per-User Burn        |
+| Immune System           | Load-Scaled Burn                 |
+| Value Flywheel          | Success Burn                     |
+
+---
+
+#### Implementation Plan
 
 ```
-Phase 1: Posting Limit Tracking (Week 1)
-├─ Create SybilResistanceManager class
-├─ Implement daily posting counter
-│  ├─ Track intents per author keypair
-│  ├─ Reset counters at UTC midnight
+Phase 1: Base Burn Infrastructure (Week 1)
+├─ Create BurnManager class
+├─ Implement burn transaction types
+│  ├─ Base filing burn
+│  ├─ Escalated burn
+│  ├─ Success burn
+│  └─ Burn verification
+├─ Add burn tracking to chain API
+├─ Create burn event logging
+└─ Add BASE_FILING_BURN config
+
+Phase 2: Daily Allowance System (Week 1-2)
+├─ Create AllowanceTracker class
+├─ Implement per-identity allowance tracking
+│  ├─ Rolling 24h window per identity
+│  ├─ Allowance reset logic
 │  └─ Persist state to disk/database
-├─ Add DAILY_FREE_LIMIT config (default: 3)
-└─ Integrate with IntentIngester validation
+├─ Add FREE_DAILY_SUBMISSIONS config (default: 1)
+├─ Integrate with IntentIngester validation
+└─ Add allowance status to dashboard
 
-Phase 2: Deposit Enforcement (Week 1-2)
-├─ Detect 4th+ intent from same identity
-├─ Calculate required deposit amount
-│  ├─ Add EXCESS_INTENT_DEPOSIT config
-│  ├─ Support tiered pricing (4th, 5th, etc.)
-│  └─ Verify deposit in intent metadata
-├─ Reject intents without valid deposit
-└─ Track deposit references in cache
+Phase 3: Exponential Escalation (Week 2)
+├─ Implement per-user daily submission counter
+├─ Create burn multiplier calculation
+│  ├─ Exponential escalation formula
+│  ├─ Configurable base and exponent
+│  └─ Daily counter reset at UTC midnight
+├─ Add BURN_ESCALATION_BASE config
+├─ Add BURN_ESCALATION_EXPONENT config
+├─ Integrate with burn transaction system
+└─ Track user burn history
 
-Phase 3: Spam Detection (Week 2)
-├─ Implement spam heuristics
-│  ├─ Duplicate content detection (hash-based)
-│  ├─ Rapid-fire submission detection
-│  ├─ Semantic duplication (embedding similarity)
-│  └─ Gibberish/low-quality text detection
-├─ Add spam proof generation
-│  ├─ Collect evidence of spam behavior
-│  ├─ Format as chain entry
-│  └─ Submit proof to chain
-└─ Track spam allegations per identity
+Phase 4: Load-Based Scaling (Week 2-3)
+├─ Create LoadMonitor class
+├─ Implement load signal collection
+│  ├─ Intent queue depth monitoring
+│  ├─ CPU/memory utilization tracking
+│  ├─ Mediation backlog calculation
+│  └─ Aggregate load score
+├─ Implement dynamic multiplier calculation
+│  ├─ Smooth scaling function (e.g., sigmoid)
+│  ├─ Configurable thresholds
+│  └─ Maximum multiplier cap
+├─ Add LOAD_SCALING_ENABLED config
+├─ Add MAX_LOAD_MULTIPLIER config
+└─ Apply multiplier to all burns uniformly
 
-Phase 4: Deposit Forfeiture & Refunds (Week 2-3)
-├─ Monitor spam proofs for validation
-├─ Implement forfeiture on upheld spam proof
-│  ├─ Burn portion of deposit
-│  ├─ Redistribute portion to challenger
-│  └─ Update chain state
-├─ Track 30-day unchallenged deposits
-├─ Implement automatic refund eligibility
-└─ Add deposit refund claim mechanism
+Phase 5: Success Burn (Week 3)
+├─ Add success burn to SettlementManager
+├─ Implement burn on settlement closure
+│  ├─ Calculate burn percentage
+│  ├─ Execute burn transaction
+│  └─ Log success burn event
+├─ Add SUCCESS_BURN_PERCENTAGE config
+├─ Track success burn statistics
+└─ Add to settlement lifecycle
 
-Phase 5: Integration & Hardening (Week 3)
-├─ Add rate limiting to API calls
-├─ Implement identity verification helpers
-├─ Add WHITELIST_IDENTITIES config (bypass limits)
-├─ Create spam report dashboard
-├─ Add metrics for spam detection accuracy
-└─ Document sybil resistance guarantees
+Phase 6: Integration & Analytics (Week 3-4)
+├─ Create comprehensive burn analytics
+│  ├─ Total burns by type
+│  ├─ Burns per user over time
+│  ├─ Load multiplier history
+│  └─ Economic impact metrics
+├─ Add burn visualization to dashboard
+├─ Implement burn prediction estimator
+├─ Add ENABLE_BURN_PREVIEW config
+├─ Create anti-spam effectiveness metrics
+└─ Document economic guarantees
 
 Testing:
-├─ Unit tests for posting counter logic
-├─ Deposit calculation verification
-├─ Spam detection accuracy benchmarks
-├─ Forfeiture flow integration tests
-├─ Stress testing with many identities
-└─ Economic attack simulations
+├─ Unit tests for burn calculations
+├─ Allowance tracking verification
+├─ Escalation formula accuracy tests
+├─ Load scaling simulation
+├─ Economic attack simulations
+├─ Spam resistance benchmarks
+└─ Integration tests with settlement lifecycle
 ```
 
-**Estimated Effort**: 3 weeks
-**Dependencies**: Chain API deposit and forfeiture endpoints
-**Risk**: Medium (requires economic analysis, potential for false positives)
+**Estimated Effort**: 4 weeks
+**Dependencies**: Chain API burn transaction support, token economics model
+**Risk**: Medium (requires careful economic tuning, potential for user friction)
 
 ---
 
@@ -1117,7 +1328,7 @@ Testing:
 **Immediate Priority (Next 3 Months)**:
 1. Comprehensive Test Suite (4 weeks) - Foundation for stability
 2. Challenge Proof Submission (2-3 weeks) - Core protocol feature
-3. Sybil Resistance (3 weeks) - Network security
+3. Behavioral Pressure Shaping & Anti-Entropy Controls (4 weeks) - Economic security & spam prevention
 4. Semantic Consensus (3-4 weeks) - High-value settlement security
 
 **Medium Priority (3-6 Months)**:
@@ -1141,7 +1352,7 @@ Testing:
 ### Critical Path
 1. **Test Suite First**: All new features should have comprehensive tests
 2. **Core Protocol Completion**: Challenges and semantic consensus are spec-defined
-3. **Economic Security**: Sybil resistance and fee distribution critical for mainnet
+3. **Economic Security**: Behavioral pressure shaping and fee distribution critical for mainnet
 4. **Governance Before Scale**: Establish governance before multi-chain expansion
 
 ### Architecture Improvements
