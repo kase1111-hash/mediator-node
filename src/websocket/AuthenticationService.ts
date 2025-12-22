@@ -232,6 +232,21 @@ export class AuthenticationService {
    * In production, use proper public key cryptography
    */
   private verifyHashBasedSignature(message: AuthenticationMessage): boolean {
+    // SECURITY: Prevent use of development-only authentication in production
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'Hash-based authentication is not allowed in production. ' +
+        'Use proper public key cryptography (RSA/Ed25519).'
+      );
+    }
+
+    // Log warning about using development authentication
+    logger.warn('Using development-only hash-based authentication', {
+      identity: message.identity,
+      environment: process.env.NODE_ENV || 'development',
+      warning: 'This method should only be used in development/testing',
+    });
+
     // For development: verify that signature is SHA-256 hash of message data
     const messageData = this.createSignatureMessage(message);
     const expectedSignature = createHash('sha256')
