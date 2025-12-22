@@ -43,7 +43,8 @@ export class AuthenticationService {
     publicKeyResolver?: (identity: string) => Promise<string | null>;
   };
 
-  private usedNonces: Set<string> = new Set();
+  // SECURITY: Track nonces with timestamps for proper expiration
+  private usedNonces: Map<string, number> = new Map(); // nonce -> timestamp
   private nonceCleanupInterval: NodeJS.Timeout;
 
   constructor(config: AuthenticationConfig = {}) {
@@ -55,13 +56,49 @@ export class AuthenticationService {
       publicKeyResolver: config.publicKeyResolver,
     };
 
-    // Clean up old nonces every minute
+    // SECURITY: Clean up expired nonces based on timestamps (fixes replay attack vulnerability)
     this.nonceCleanupInterval = setInterval(() => {
-      // Clear all nonces (simple approach - could track timestamps for better cleanup)
-      if (this.usedNonces.size > 10000) {
-        this.usedNonces.clear();
+      const now = Date.now();
+      const maxAge = this.config.maxAge;
+      let removedCount = 0;
+
+      // Remove expired nonces based on timestamp
+      for (const [nonce, timestamp] of this.usedNonces.entries()) {
+        if (now - timestamp > maxAge) {
+          this.usedNonces.delete(nonce);
+          removedCount++;
+        }
       }
-    }, 60000);
+
+      // SECURITY: Safety limit - if nonce map grows too large, remove oldest entries
+      // This prevents DoS but only as a fallback (shouldn't happen in normal operation)
+      if (this.usedNonces.size > 100000) {
+        logger.error('Nonce set exceeded safety limit', {
+          size: this.usedNonces.size,
+          removedExpired: removedCount,
+        });
+
+        // Sort by timestamp and remove oldest 50%
+        const sorted = Array.from(this.usedNonces.entries()).sort((a, b) => a[1] - b[1]);
+        const toRemove = sorted.slice(0, Math.floor(sorted.length / 2));
+
+        toRemove.forEach(([nonce]) => {
+          this.usedNonces.delete(nonce);
+        });
+
+        logger.warn('Emergency nonce cleanup performed', {
+          removed: toRemove.length,
+          remaining: this.usedNonces.size,
+        });
+      }
+
+      if (removedCount > 0) {
+        logger.debug('Nonce cleanup completed', {
+          removed: removedCount,
+          remaining: this.usedNonces.size,
+        });
+      }
+    }, 60000); // Run every minute
   }
 
   /**
@@ -120,9 +157,9 @@ export class AuthenticationService {
         };
       }
 
-      // Mark nonce as used
+      // SECURITY: Mark nonce as used with timestamp for proper expiration
       if (message.nonce) {
-        this.usedNonces.add(message.nonce);
+        this.usedNonces.set(message.nonce, Date.now());
       }
 
       logger.info('Authentication successful', {
