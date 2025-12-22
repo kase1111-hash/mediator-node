@@ -177,7 +177,7 @@ Acceptance Deadline: ${new Date(settlement.acceptanceDeadline).toISOString()}
 
         if (response.data.challenges && response.data.challenges.length > 0) {
           settlement.challenges = response.data.challenges;
-          logger.warn('Settlement challenged', { id, challenges: settlement.challenges.length });
+          logger.warn('Settlement challenged', { id, challenges: settlement.challenges?.length || 0 });
         }
 
         // Check if both accepted
