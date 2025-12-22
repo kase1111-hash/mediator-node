@@ -218,6 +218,12 @@ export class HealthMonitor {
 
     const idle = totalIdle / cpus.length;
     const total = totalTick / cpus.length;
+
+    // Handle edge case where total is 0 (can happen in test environments)
+    if (total === 0) {
+      return 0;
+    }
+
     const usage = 100 - (100 * idle) / total;
 
     return Math.max(0, Math.min(100, usage));

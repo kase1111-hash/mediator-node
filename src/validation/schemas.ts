@@ -66,23 +66,18 @@ export type ValidatedProposedSettlement = z.infer<typeof ProposedSettlementSchem
 
 export const DisputeDeclarationSchema = z.object({
   disputeId: z.string().min(1).max(256),
-  settlementId: z.string().min(1).max(256),
-  challenger: z.string().min(1).max(256),
-  challengeType: z.enum(['misalignment', 'fraud', 'bias', 'other']),
-  evidence: z.array(z.string().max(256)),
-  description: z.string().min(1).max(10000),
-  timestamp: z.number().int().positive(),
-  status: z.enum([
-    'pending',
-    'under_review',
-    'clarification_requested',
-    'escalated',
-    'resolved',
-    'rejected',
-  ]),
-  mediatorResponse: z.string().max(10000).optional(),
-  resolution: z.string().max(10000).optional(),
-  penalty: z.number().nonnegative().optional(),
+  claimant: z.unknown(), // DisputeParty object
+  respondent: z.unknown().optional(), // DisputeParty object
+  contestedItems: z.array(z.unknown()), // ContestedItem[] array
+  issueDescription: z.string().min(1).max(10000),
+  desiredEscalationPath: z.string().max(256).optional(),
+  status: z.enum(['initiated', 'under_review', 'clarifying', 'escalated', 'resolved', 'dismissed']),
+  initiatedAt: z.number().int().positive(),
+  updatedAt: z.number().int().positive(),
+  evidence: z.array(z.unknown()), // DisputeEvidence[] array
+  clarificationRecord: z.unknown().optional(), // ClarificationRecord object
+  escalation: z.unknown().optional(), // EscalationDeclaration object
+  resolution: z.unknown().optional(), // DisputeResolution object
 }).passthrough(); // Allow additional fields from actual type
 
 export type ValidatedDisputeDeclaration = z.infer<typeof DisputeDeclarationSchema>;
@@ -329,14 +324,19 @@ export type ValidatedReputationRecord = z.infer<typeof ReputationRecordSchema>;
 export const FrozenItemSchema = z.object({
   itemId: z.string().min(1).max(256),
   disputeId: z.string().min(1).max(256),
-  itemType: z.enum(['intent', 'settlement', 'receipt', 'other']),
-  originalData: z.record(z.unknown()),
-  contentHash: z.string().min(1).max(256),
+  itemType: z.enum(['intent', 'settlement', 'receipt', 'agreement', 'delegation']),
+  snapshot: z.unknown().optional(), // Full snapshot of the item
+  snapshotHash: z.string().min(1).max(256),
   frozenAt: z.number().int().positive(),
   frozenBy: z.string().min(1).max(256),
   status: z.enum(['active', 'under_dispute', 'dispute_resolved']),
-  disputeResolution: z.string().max(10000).optional(),
-  metadata: z.record(z.unknown()).optional(),
+  mutationAttempts: z.array(z.object({
+    timestamp: z.number().int().positive(),
+    attemptedBy: z.string().min(1).max(256),
+    operationType: z.enum(['update', 'delete']),
+    rejected: z.boolean(),
+    auditLog: z.string().max(5000),
+  })).optional(),
 }).passthrough(); // Allow additional fields from actual type
 
 export type ValidatedFrozenItem = z.infer<typeof FrozenItemSchema>;
