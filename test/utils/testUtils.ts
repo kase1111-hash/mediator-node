@@ -5,7 +5,7 @@
  * for use across all test files.
  */
 
-import { Intent, ProposedSettlement, MediatorConfig, ConsensusMode } from '../../src/types';
+import { Intent, ProposedSettlement, MediatorConfig } from '../../src/types';
 import { nanoid } from 'nanoid';
 
 /**
@@ -33,7 +33,7 @@ export function createMockIntent(overrides: Partial<Intent> = {}): Intent {
     prose: overrides.prose || 'I need help with a task',
     timestamp: overrides.timestamp || Date.now(),
     status: overrides.status || 'pending',
-    facilitationFee: overrides.facilitationFee || 1,
+    offeredFee: overrides.offeredFee || 1,
     constraints: overrides.constraints || [],
     desires: overrides.desires || [],
     ...overrides,
@@ -46,16 +46,24 @@ export function createMockIntent(overrides: Partial<Intent> = {}): Intent {
 export function createMockProposedSettlement(
   overrides: Partial<ProposedSettlement> = {}
 ): ProposedSettlement {
+  const defaultTerms = {
+    price: 100,
+    deliverables: ['Mock deliverable'],
+    timelines: '1 week',
+  };
+
   return {
     id: overrides.id || generateSettlementId(),
     intentHashA: overrides.intentHashA || generateIntentId(),
     intentHashB: overrides.intentHashB || generateIntentId(),
     reasoningTrace: overrides.reasoningTrace || 'These intents align well',
-    proposedTerms: overrides.proposedTerms || 'Party A will deliver X, Party B will pay Y',
+    proposedTerms: overrides.proposedTerms || defaultTerms,
     facilitationFee: overrides.facilitationFee || 1,
+    facilitationFeePercent: overrides.facilitationFeePercent || 1.0,
     mediatorId: overrides.mediatorId || `mediator_${nanoid(6)}`,
     modelIntegrityHash: overrides.modelIntegrityHash || `hash_${nanoid(10)}`,
     timestamp: overrides.timestamp || Date.now(),
+    acceptanceDeadline: overrides.acceptanceDeadline || Date.now() + 72 * 60 * 60 * 1000,
     status: overrides.status || 'proposed',
     stakeReference: overrides.stakeReference,
     authoritySignature: overrides.authoritySignature,
@@ -68,18 +76,20 @@ export function createMockProposedSettlement(
  */
 export function createMockConfig(overrides: Partial<MediatorConfig> = {}): MediatorConfig {
   return {
-    chainApiUrl: overrides.chainApiUrl || 'http://localhost:3000',
-    mediatorId: overrides.mediatorId || `mediator_${nanoid(6)}`,
-    mediatorKeyPath: overrides.mediatorKeyPath || '/tmp/test-key.json',
+    chainEndpoint: overrides.chainEndpoint || 'http://localhost:3000',
+    chainId: overrides.chainId || 'test-chain',
+    consensusMode: overrides.consensusMode || 'permissionless',
     llmProvider: overrides.llmProvider || 'anthropic',
     llmApiKey: overrides.llmApiKey || 'test-api-key',
     llmModel: overrides.llmModel || 'claude-3-5-sonnet-20241022',
-    vectorDimension: overrides.vectorDimension || 1024,
-    vectorMaxElements: overrides.vectorMaxElements || 10000,
-    pollingIntervalMs: overrides.pollingIntervalMs || 10000,
-    consensusMode: overrides.consensusMode || ConsensusMode.Permissionless,
-    minEffectiveStake: overrides.minEffectiveStake,
-    authoritySet: overrides.authoritySet,
+    mediatorPrivateKey: overrides.mediatorPrivateKey || 'test-private-key',
+    mediatorPublicKey: overrides.mediatorPublicKey || 'test-public-key',
+    facilitationFeePercent: overrides.facilitationFeePercent || 1.0,
+    vectorDbPath: overrides.vectorDbPath || '/tmp/test-vector-db',
+    vectorDimensions: overrides.vectorDimensions || 1024,
+    maxIntentsCache: overrides.maxIntentsCache || 100,
+    acceptanceWindowHours: overrides.acceptanceWindowHours || 72,
+    logLevel: overrides.logLevel || 'info',
     ...overrides,
   };
 }
@@ -142,7 +152,7 @@ export class MockChainApiClient {
   }
 
   async getOpenIntents(): Promise<Intent[]> {
-    return this.intents.filter(i => i.status === 'open' || i.status === 'pending');
+    return this.intents.filter(i => i.status === 'pending');
   }
 
   async submitEntry(entry: any): Promise<{ success: boolean; entryId: string }> {
