@@ -272,6 +272,14 @@ export interface MediatorConfig {
   enableRiskTracking?: boolean; // Track settlement risks (default: true)
   autoValidatePreconditions?: boolean; // Auto-check MP-01/02/03/04 preconditions (default: true)
 
+  // WebSocket Real-Time Updates configuration
+  enableWebSocket?: boolean; // Enable WebSocket server for real-time events (default: false)
+  webSocketPort?: number; // Port for WebSocket server (default: 8080)
+  webSocketHost?: string; // Host for WebSocket server (default: '0.0.0.0')
+  webSocketAuthRequired?: boolean; // Require authentication for WebSocket connections (default: true)
+  webSocketMaxConnections?: number; // Maximum concurrent WebSocket connections (default: 1000)
+  webSocketHeartbeatInterval?: number; // Heartbeat interval in ms (default: 30000)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -1246,4 +1254,316 @@ export interface SettlementRisk {
   resolved: boolean;
   resolvedAt?: number;
   evidence?: string[];
+}
+
+/**
+ * ============================================================================
+ * WebSocket Real-Time Events System
+ * ============================================================================
+ */
+
+/**
+ * Event types for real-time notifications
+ */
+export type WebSocketEventType =
+  // Intent events
+  | 'intent.submitted'
+  | 'intent.accepted'
+  | 'intent.rejected'
+  | 'intent.closed'
+  | 'intent.unalignable'
+
+  // Settlement events (legacy ProposedSettlement)
+  | 'settlement.proposed'
+  | 'settlement.accepted'
+  | 'settlement.rejected'
+  | 'settlement.challenged'
+  | 'settlement.closed'
+
+  // MP-05 Settlement events
+  | 'mp05.settlement.initiated'
+  | 'mp05.settlement.declared'
+  | 'mp05.settlement.ratified'
+  | 'mp05.settlement.finalized'
+  | 'mp05.settlement.contested'
+  | 'mp05.settlement.reversed'
+  | 'mp05.settlement.stage_completed'
+
+  // MP-05 Capitalization events
+  | 'mp05.capitalization.event_created'
+  | 'mp05.capitalization.interface_generated'
+  | 'mp05.capitalization.executed'
+
+  // Receipt events (MP-02)
+  | 'receipt.created'
+  | 'receipt.validated'
+  | 'receipt.anchored'
+  | 'receipt.verified'
+  | 'receipt.signal_added'
+  | 'receipt.segment_completed'
+
+  // Dispute events (MP-03)
+  | 'dispute.initiated'
+  | 'dispute.under_review'
+  | 'dispute.clarifying'
+  | 'dispute.escalated'
+  | 'dispute.resolved'
+  | 'dispute.dismissed'
+  | 'dispute.evidence_submitted'
+  | 'dispute.clarification_provided'
+
+  // License events (MP-04)
+  | 'license.proposed'
+  | 'license.ratified'
+  | 'license.active'
+  | 'license.expired'
+  | 'license.revoked'
+  | 'license.violation_detected'
+
+  // Delegation events (MP-04)
+  | 'delegation.proposed'
+  | 'delegation.ratified'
+  | 'delegation.active'
+  | 'delegation.expired'
+  | 'delegation.revoked'
+  | 'delegation.violation_detected'
+  | 'delegation.action_delegated'
+
+  // Burn events (MP-06)
+  | 'burn.executed'
+  | 'burn.escalated'
+  | 'burn.load_scaled'
+  | 'burn.success_burn'
+
+  // Challenge events
+  | 'challenge.submitted'
+  | 'challenge.upheld'
+  | 'challenge.rejected'
+
+  // Reputation events
+  | 'reputation.updated'
+  | 'reputation.weight_changed'
+
+  // Verification events
+  | 'verification.requested'
+  | 'verification.response_received'
+  | 'verification.completed'
+  | 'verification.failed'
+
+  // System events
+  | 'system.load_pressure_changed'
+  | 'system.config_updated'
+  | 'system.node_status_changed';
+
+/**
+ * Base structure for all WebSocket messages
+ */
+export interface WebSocketMessage<T = any> {
+  type: WebSocketEventType;
+  timestamp: number;
+  payload: T;
+  eventId: string;
+  version: string; // Protocol version
+}
+
+/**
+ * Intent event payloads
+ */
+export interface IntentEventPayload {
+  intent: Intent;
+  previousStatus?: IntentStatus;
+}
+
+/**
+ * Settlement event payloads (legacy)
+ */
+export interface SettlementEventPayload {
+  settlement: ProposedSettlement;
+  previousStatus?: SettlementStatus;
+  party?: string; // For acceptance/rejection events
+}
+
+/**
+ * MP-05 Settlement event payloads
+ */
+export interface MP05SettlementEventPayload {
+  settlement: Settlement;
+  previousStatus?: MP05SettlementStatus;
+  declaringParty?: string;
+  declaration?: SettlementDeclaration;
+  stageNumber?: number;
+}
+
+/**
+ * MP-05 Capitalization event payloads
+ */
+export interface MP05CapitalizationEventPayload {
+  event?: CapitalizationEvent;
+  interface?: CapitalizationInterface;
+  settlementId: string;
+  valueType?: ValueType;
+}
+
+/**
+ * Receipt event payloads (MP-02)
+ */
+export interface ReceiptEventPayload {
+  receipt: EffortReceipt;
+  previousStatus?: ReceiptStatus;
+  signal?: Signal;
+  segment?: EffortSegment;
+}
+
+/**
+ * Dispute event payloads (MP-03)
+ */
+export interface DisputeEventPayload {
+  dispute: DisputeDeclaration;
+  previousStatus?: DisputeStatus;
+  evidence?: DisputeEvidence;
+  clarification?: ClarificationRecord;
+  escalation?: EscalationDeclaration;
+  resolution?: DisputeResolution;
+}
+
+/**
+ * License event payloads (MP-04)
+ */
+export interface LicenseEventPayload {
+  license: License;
+  previousStatus?: LicenseStatus;
+  violation?: ScopeViolation;
+}
+
+/**
+ * Delegation event payloads (MP-04)
+ */
+export interface DelegationEventPayload {
+  delegation: DelegationGrant;
+  previousStatus?: DelegationStatus;
+  violation?: ScopeViolation;
+  action?: DelegatedAction;
+}
+
+/**
+ * Burn event payloads (MP-06)
+ */
+export interface BurnEventPayload {
+  burn: BurnTransaction;
+  userRecord?: UserSubmissionRecord;
+  loadMultiplier?: number;
+  escalationMultiplier?: number;
+}
+
+/**
+ * Challenge event payloads
+ */
+export interface ChallengeEventPayload {
+  challenge: Challenge;
+  previousStatus?: 'pending' | 'upheld' | 'rejected';
+  settlement?: ProposedSettlement;
+}
+
+/**
+ * Reputation event payloads
+ */
+export interface ReputationEventPayload {
+  reputation: MediatorReputation;
+  previousWeight?: number;
+  changeReason: string;
+}
+
+/**
+ * Verification event payloads
+ */
+export interface VerificationEventPayload {
+  request?: VerificationRequest;
+  response?: VerificationResponse;
+  settlementId: string;
+  status: VerificationStatus;
+  result?: SemanticEquivalenceResult;
+}
+
+/**
+ * System event payloads
+ */
+export interface SystemEventPayload {
+  loadMultiplier?: number;
+  currentLoad?: number;
+  configKey?: string;
+  configValue?: any;
+  nodeStatus?: 'active' | 'paused' | 'maintenance' | 'error';
+  message?: string;
+}
+
+/**
+ * WebSocket connection metadata
+ */
+export interface WebSocketConnection {
+  connectionId: string;
+  identity: string;
+  connectedAt: number;
+  lastActivity: number;
+  subscriptions: WebSocketSubscription[];
+  authenticated: boolean;
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Subscription configuration
+ */
+export interface WebSocketSubscription {
+  subscriptionId: string;
+  topics: WebSocketEventType[];
+  filters?: {
+    parties?: string[];        // Only events involving these parties
+    intentHashes?: string[];   // Only events for specific intents
+    settlementIds?: string[];  // Only events for specific settlements
+    receiptIds?: string[];     // Only events for specific receipts
+    disputeIds?: string[];     // Only events for specific disputes
+    licenseIds?: string[];     // Only events for specific licenses
+    delegationIds?: string[];  // Only events for specific delegations
+    minSeverity?: 'low' | 'medium' | 'high'; // For risk/violation events
+  };
+}
+
+/**
+ * Subscription request from client
+ */
+export interface SubscriptionRequest {
+  action: 'subscribe' | 'unsubscribe' | 'update';
+  subscriptionId?: string;
+  topics?: WebSocketEventType[];
+  filters?: WebSocketSubscription['filters'];
+}
+
+/**
+ * Subscription response to client
+ */
+export interface SubscriptionResponse {
+  success: boolean;
+  subscriptionId?: string;
+  error?: string;
+  activeSubscriptions?: WebSocketSubscription[];
+}
+
+/**
+ * Authentication message
+ */
+export interface AuthenticationMessage {
+  action: 'authenticate';
+  identity: string;
+  signature: string;
+  timestamp: number;
+  nonce?: string;
+}
+
+/**
+ * Authentication response
+ */
+export interface AuthenticationResponse {
+  success: boolean;
+  connectionId?: string;
+  error?: string;
+  expiresAt?: number;
 }

@@ -18,6 +18,8 @@ import { EffortCaptureSystem } from './effort/EffortCaptureSystem';
 import { DisputeManager } from './dispute/DisputeManager';
 import { LicensingManager } from './licensing/LicensingManager';
 import { MP05SettlementCoordinator } from './settlement/MP05SettlementCoordinator';
+import { WebSocketServer } from './websocket/WebSocketServer';
+import { EventPublisher } from './websocket/EventPublisher';
 import { logger } from './utils/logger';
 
 /**
@@ -48,6 +50,8 @@ export class MediatorNode {
   private disputeManager?: DisputeManager;
   private licensingManager?: LicensingManager;
   private mp05Coordinator?: MP05SettlementCoordinator;
+  private webSocketServer?: WebSocketServer;
+  private eventPublisher?: EventPublisher;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -117,6 +121,19 @@ export class MediatorNode {
       );
     }
 
+    // Initialize WebSocket Real-Time Updates system
+    if (config.enableWebSocket) {
+      this.webSocketServer = new WebSocketServer({
+        port: config.webSocketPort || 8080,
+        host: config.webSocketHost || '0.0.0.0',
+        authRequired: config.webSocketAuthRequired ?? true,
+        maxConnections: config.webSocketMaxConnections || 1000,
+        heartbeatInterval: config.webSocketHeartbeatInterval || 30000,
+      });
+
+      this.eventPublisher = new EventPublisher(this.webSocketServer);
+    }
+
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
       consensusMode: config.consensusMode,
@@ -127,6 +144,7 @@ export class MediatorNode {
       disputeSystemEnabled: config.enableDisputeSystem || false,
       licensingSystemEnabled: config.enableLicensingSystem || false,
       settlementSystemEnabled: config.enableSettlementSystem || false,
+      webSocketEnabled: config.enableWebSocket || false,
     });
   }
 
@@ -204,6 +222,15 @@ export class MediatorNode {
         this.loadMonitor.startMonitoring(interval);
       }
 
+      // Start WebSocket server if enabled
+      if (this.webSocketServer) {
+        await this.webSocketServer.start();
+        logger.info('WebSocket server started', {
+          port: this.config.webSocketPort || 8080,
+          authRequired: this.config.webSocketAuthRequired ?? true,
+        });
+      }
+
       logger.info('Mediator node started successfully', {
         reputation: this.reputationTracker.getWeight(),
         effectiveStake: this.stakeManager.getEffectiveStake(),
@@ -240,6 +267,12 @@ export class MediatorNode {
     // Stop Effort Capture system if running (MP-02)
     if (this.effortCaptureSystem) {
       this.effortCaptureSystem.stop();
+    }
+
+    // Stop WebSocket server if running
+    if (this.webSocketServer) {
+      await this.webSocketServer.stop();
+      logger.info('WebSocket server stopped');
     }
 
     // Save vector database
@@ -891,5 +924,19 @@ export class MediatorNode {
    */
   public getMP05Coordinator(): MP05SettlementCoordinator | undefined {
     return this.mp05Coordinator;
+  }
+
+  /**
+   * Get WebSocketServer instance for direct access
+   */
+  public getWebSocketServer(): WebSocketServer | undefined {
+    return this.webSocketServer;
+  }
+
+  /**
+   * Get EventPublisher instance for publishing real-time events
+   */
+  public getEventPublisher(): EventPublisher | undefined {
+    return this.eventPublisher;
   }
 }
