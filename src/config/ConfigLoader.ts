@@ -92,6 +92,17 @@ export class ConfigLoader {
       enableSpamProofSubmission: this.getOptional('ENABLE_SPAM_PROOF_SUBMISSION') === 'true',
       minSpamConfidence: this.getOptionalNumber('MIN_SPAM_CONFIDENCE'),
 
+      // MP-02: Proof-of-Effort Receipt Protocol configuration
+      enableEffortCapture: this.getOptional('ENABLE_EFFORT_CAPTURE') === 'true',
+      effortObserverId: this.getOptional('EFFORT_OBSERVER_ID'),
+      effortCaptureModalities: this.getOptional('EFFORT_CAPTURE_MODALITIES')?.split(','),
+      effortSegmentationStrategy: this.getOptional('EFFORT_SEGMENTATION_STRATEGY') as 'time_window' | 'activity_boundary' | 'hybrid' | undefined,
+      effortTimeWindowMinutes: this.getOptionalNumber('EFFORT_TIME_WINDOW_MINUTES'),
+      effortActivityGapMinutes: this.getOptionalNumber('EFFORT_ACTIVITY_GAP_MINUTES'),
+      effortAutoAnchor: this.getOptional('EFFORT_AUTO_ANCHOR') === 'true' || this.getOptional('EFFORT_AUTO_ANCHOR') === undefined,
+      effortEncryptSignals: this.getOptional('EFFORT_ENCRYPT_SIGNALS') === 'true' || this.getOptional('EFFORT_ENCRYPT_SIGNALS') === undefined,
+      effortRetentionDays: this.getOptionalNumber('EFFORT_RETENTION_DAYS'),
+
       // Logging
       logLevel: this.getLogLevel(),
     };

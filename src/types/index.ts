@@ -238,6 +238,17 @@ export interface MediatorConfig {
   enableSpamProofSubmission?: boolean; // Allow mediators to submit spam proofs (default: false)
   minSpamConfidence?: number; // Minimum confidence for spam classification (default: 0.9)
 
+  // MP-02: Proof-of-Effort Receipt Protocol configuration
+  enableEffortCapture?: boolean; // Enable effort capture and receipt generation (default: false)
+  effortObserverId?: string; // Unique identifier for this observer instance
+  effortCaptureModalities?: string[]; // Modalities to capture (default: ['text_edit', 'command'])
+  effortSegmentationStrategy?: 'time_window' | 'activity_boundary' | 'hybrid'; // (default: 'time_window')
+  effortTimeWindowMinutes?: number; // Time window for segmentation (default: 30)
+  effortActivityGapMinutes?: number; // Activity gap for boundary detection (default: 10)
+  effortAutoAnchor?: boolean; // Auto-anchor receipts to chain (default: true)
+  effortEncryptSignals?: boolean; // Encrypt raw signals at rest (default: true)
+  effortRetentionDays?: number; // Signal retention period (default: 90, 0 = indefinite)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
@@ -555,4 +566,113 @@ export interface SubmissionLimitResult {
   freeSubmissionsRemaining: number;
   dailyCount: number;
   reason?: string; // Why submission was blocked (if !allowed)
+}
+
+// ============================================================================
+// MP-02: Proof-of-Effort Receipt Protocol Types
+// ============================================================================
+
+/**
+ * Signal modality types
+ */
+export type SignalModality = 'text_edit' | 'command' | 'voice' | 'structured_tool' | 'other';
+
+/**
+ * Raw observable trace of effort
+ */
+export interface Signal {
+  signalId: string; // Unique signal identifier
+  modality: SignalModality;
+  timestamp: number;
+  content: string; // Raw signal content
+  metadata?: Record<string, any>; // Additional context (file path, command, etc.)
+  hash: string; // SHA-256 hash of content
+}
+
+/**
+ * Effort segment status
+ */
+export type SegmentStatus = 'active' | 'complete' | 'validated' | 'anchored';
+
+/**
+ * Bounded time slice of signals treated as unit of analysis
+ */
+export interface EffortSegment {
+  segmentId: string;
+  startTime: number;
+  endTime: number;
+  signals: Signal[];
+  status: SegmentStatus;
+  humanMarker?: string; // Optional human-provided marker
+  segmentationRule: string; // How this segment was created (time_window, activity_boundary, human_marker)
+}
+
+/**
+ * Validation assessment from LLM
+ */
+export interface ValidationAssessment {
+  validatorId: string; // LLM model identifier
+  modelVersion: string;
+  timestamp: number;
+  coherenceScore: number; // 0-1, linguistic coherence
+  progressionScore: number; // 0-1, conceptual progression
+  consistencyScore: number; // 0-1, internal consistency
+  synthesisScore: number; // 0-1, synthesis vs duplication (0=duplicate, 1=original)
+  summary: string; // Deterministic effort summary
+  uncertaintyFlags: string[]; // Areas of uncertainty or ambiguity
+  evidence: string; // Supporting evidence for scores
+}
+
+/**
+ * Receipt status
+ */
+export type ReceiptStatus = 'draft' | 'validated' | 'anchored' | 'verified';
+
+/**
+ * Cryptographic record attesting effort occurred
+ */
+export interface EffortReceipt {
+  receiptId: string; // UUID + hash
+  segmentId: string;
+  startTime: number;
+  endTime: number;
+  signalHashes: string[]; // Hashes of all signals in segment
+  validation: ValidationAssessment;
+  observerId: string; // System/component that captured signals
+  validatorId: string; // LLM model that validated
+  receiptHash: string; // SHA-256 of receipt contents
+  status: ReceiptStatus;
+  anchoredAt?: number; // Timestamp when anchored to ledger
+  ledgerReference?: string; // Chain/ledger reference
+  priorReceipts?: string[]; // References to previous receipts
+  externalArtifacts?: string[]; // References to external work products
+  metadata?: Record<string, any>;
+}
+
+/**
+ * Receipt verification result
+ */
+export interface ReceiptVerification {
+  receiptId: string;
+  isValid: boolean;
+  hashMatches: boolean;
+  ledgerConfirmed: boolean;
+  validationReproducible: boolean;
+  issues: string[]; // Any verification issues found
+  verifiedAt: number;
+}
+
+/**
+ * Effort capture configuration
+ */
+export interface EffortCaptureConfig {
+  enabled: boolean;
+  observerId: string; // Unique identifier for this observer instance
+  captureModalities: SignalModality[];
+  segmentationStrategy: 'time_window' | 'activity_boundary' | 'hybrid';
+  timeWindowMinutes?: number; // For time_window strategy
+  activityGapMinutes?: number; // For activity_boundary strategy
+  autoAnchor: boolean; // Automatically anchor receipts
+  encryptSignals: boolean; // Encrypt raw signals at rest
+  retentionDays?: number; // How long to keep raw signals (0 = indefinite)
 }

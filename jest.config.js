@@ -25,6 +25,7 @@ module.exports = {
   moduleFileExtensions: ['ts', 'js', 'json'],
   moduleNameMapper: {
     '^hnswlib-node$': '<rootDir>/__mocks__/hnswlib-node.js',
+    '^chokidar$': '<rootDir>/__mocks__/chokidar.js',
   },
   verbose: true,
   testTimeout: 10000,
