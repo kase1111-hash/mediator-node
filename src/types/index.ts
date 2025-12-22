@@ -59,6 +59,12 @@ export interface ProposedSettlement {
   partyAAccepted?: boolean;
   partyBAccepted?: boolean;
   challenges?: Challenge[];
+
+  // Semantic Consensus Verification
+  requiresVerification?: boolean;
+  verificationRequest?: VerificationRequest;
+  verificationResponses?: VerificationResponse[];
+  verificationStatus?: VerificationStatus;
 }
 
 /**
@@ -214,6 +220,15 @@ export interface MediatorConfig {
   enableChallengeSubmission?: boolean; // Enable automatic challenge submission (default: false)
   minConfidenceToChallenge?: number; // Minimum confidence to submit challenge 0-1 (default: 0.8)
   challengeCheckInterval?: number; // How often to check for challengeable settlements in ms (default: 60000)
+
+  // Semantic Consensus Verification configuration
+  enableSemanticConsensus?: boolean; // Enable semantic consensus for high-value settlements (default: false)
+  highValueThreshold?: number; // Settlement value threshold requiring verification (default: 10000)
+  verificationDeadlineHours?: number; // Hours to wait for verification responses (default: 24)
+  requiredVerifiers?: number; // Number of verifiers to select (default: 5)
+  requiredConsensus?: number; // Minimum consensus for approval (default: 3)
+  semanticSimilarityThreshold?: number; // Cosine similarity threshold for equivalence (default: 0.85)
+  participateInVerification?: boolean; // Opt-in to participate as verifier (default: true)
 
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
@@ -401,4 +416,75 @@ export interface ChallengeHistory {
   status: 'pending' | 'upheld' | 'rejected';
   contradictionAnalysis: ContradictionAnalysis;
   lastChecked: number;
+}
+
+/**
+ * Semantic Consensus Verification Types
+ */
+
+/**
+ * Status of semantic consensus verification
+ */
+export type VerificationStatus =
+  | 'pending'           // Waiting for verification responses
+  | 'in_progress'       // Verifiers selected, awaiting responses
+  | 'consensus_reached' // 3+ semantically equivalent summaries
+  | 'consensus_failed'  // Failed to reach consensus
+  | 'timeout'           // Verification deadline passed
+  | 'not_required';     // Settlement below threshold
+
+/**
+ * Request for semantic verification from selected mediators
+ */
+export interface VerificationRequest {
+  settlementId: string;
+  requesterId: string;
+  intentHashA: string;
+  intentHashB: string;
+  proposedTerms: ProposedSettlement['proposedTerms'];
+  settlementValue: number;
+  selectedVerifiers: string[]; // 5 mediator IDs selected via weighted random
+  requestedAt: number;
+  responseDeadline: number; // Timestamp
+  signature: string;
+}
+
+/**
+ * Response from a verifier mediator
+ */
+export interface VerificationResponse {
+  settlementId: string;
+  verifierId: string;
+  semanticSummary: string; // Natural language summary of settlement semantics
+  summaryEmbedding: number[]; // Embedding vector for similarity comparison
+  approves: boolean; // Whether verifier approves the settlement
+  confidence: number; // 0-1, verifier's confidence in their summary
+  timestamp: number;
+  signature: string;
+}
+
+/**
+ * Result of semantic equivalence check between summaries
+ */
+export interface SemanticEquivalenceResult {
+  summary1: string;
+  summary2: string;
+  cosineSimilarity: number; // 0-1
+  areEquivalent: boolean; // true if similarity >= threshold
+  threshold: number; // The threshold used for comparison
+}
+
+/**
+ * Complete verification record for a settlement
+ */
+export interface SemanticVerification {
+  settlementId: string;
+  status: VerificationStatus;
+  request: VerificationRequest;
+  responses: VerificationResponse[];
+  equivalenceResults: SemanticEquivalenceResult[];
+  consensusReached: boolean;
+  consensusCount: number; // Number of semantically equivalent summaries
+  requiredConsensus: number; // Typically 3
+  completedAt?: number;
 }
