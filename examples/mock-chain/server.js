@@ -8,12 +8,64 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
+const rateLimit = require('express-rate-limit');
 
 const app = express();
 const PORT = process.env.PORT || 8545;
 
+// SECURITY: General rate limiter to prevent DoS attacks
+const generalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Limit each IP to 1000 requests per windowMs
+  message: { error: 'Too many requests, please try again later' },
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+});
+
+// SECURITY: Strict rate limiter for write operations
+const writeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 write requests per windowMs
+  message: { error: 'Too many write requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// SECURITY: Very strict rate limiter for admin endpoints
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 20, // Limit each IP to 20 admin requests per windowMs
+  message: { error: 'Too many admin requests, please try again later' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 app.use(cors());
 app.use(bodyParser.json());
+app.use(generalLimiter);
+
+// SECURITY: Content-Type validation middleware for POST/PUT/PATCH requests
+app.use((req, res, next) => {
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    const contentType = req.get('Content-Type');
+
+    // Allow requests with no body (Content-Length: 0)
+    const contentLength = req.get('Content-Length');
+    if (contentLength === '0' || !req.body || Object.keys(req.body).length === 0) {
+      return next();
+    }
+
+    // Require application/json for requests with body
+    if (!contentType || !contentType.includes('application/json')) {
+      return res.status(415).json({
+        error: 'Unsupported Media Type',
+        message: 'Content-Type must be application/json',
+        received: contentType || 'none'
+      });
+    }
+  }
+  next();
+});
 
 // In-memory data stores
 let intents = [];
@@ -99,24 +151,39 @@ app.get('/api/v1/intents', (req, res) => {
 
   let filtered = intents;
 
-  if (status) {
+  // SECURITY: Validate query parameters
+  if (status && typeof status === 'string') {
+    // Validate status is one of the allowed values
+    const allowedStatuses = ['pending', 'matched', 'settled', 'challenged', 'rejected'];
+    if (!allowedStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status parameter' });
+    }
     filtered = filtered.filter(i => i.status === status);
   }
 
+  // SECURITY: Validate and sanitize 'since' parameter
   if (since) {
-    const sinceTimestamp = parseInt(since);
+    const sinceTimestamp = parseInt(since, 10);
+    if (isNaN(sinceTimestamp) || sinceTimestamp < 0) {
+      return res.status(400).json({ error: 'Invalid since parameter (must be non-negative integer)' });
+    }
     filtered = filtered.filter(i => i.timestamp >= sinceTimestamp);
   }
 
+  // SECURITY: Validate and sanitize 'limit' parameter
   if (limit) {
-    filtered = filtered.slice(0, parseInt(limit));
+    const limitValue = parseInt(limit, 10);
+    if (isNaN(limitValue) || limitValue < 1 || limitValue > 1000) {
+      return res.status(400).json({ error: 'Invalid limit parameter (must be 1-1000)' });
+    }
+    filtered = filtered.slice(0, limitValue);
   }
 
   res.json({ intents: filtered });
 });
 
 // POST /api/v1/entries - Submit entry
-app.post('/api/v1/entries', (req, res) => {
+app.post('/api/v1/entries', writeLimiter, (req, res) => {
   const { type, author, content, metadata, signature } = req.body;
 
   const entry = {
@@ -248,10 +315,20 @@ app.get('/health', (req, res) => {
 // Admin endpoints for testing
 
 // POST /admin/add-intent - Add a test intent
-app.post('/admin/add-intent', (req, res) => {
+app.post('/admin/add-intent', adminLimiter, (req, res) => {
+  // SECURITY: Use whitelist approach instead of spreading req.body to prevent prototype pollution
+  const allowedFields = ['author', 'prose', 'desires', 'constraints', 'offeredFee', 'branch', 'nonce', 'signature', 'metadata'];
+  const safeBody = {};
+
+  allowedFields.forEach(field => {
+    if (req.body[field] !== undefined) {
+      safeBody[field] = req.body[field];
+    }
+  });
+
   const intent = {
     hash: `0x${Date.now().toString(16)}${Math.random().toString(36).substr(2, 9)}`,
-    ...req.body,
+    ...safeBody,
     timestamp: Date.now(),
     status: 'pending'
   };
@@ -261,7 +338,7 @@ app.post('/admin/add-intent', (req, res) => {
 });
 
 // POST /admin/accept-settlement - Simulate party acceptance
-app.post('/admin/accept-settlement', (req, res) => {
+app.post('/admin/accept-settlement', adminLimiter, (req, res) => {
   const { settlementId, party } = req.body;
   const settlement = settlements.find(s => s.id === settlementId);
 
