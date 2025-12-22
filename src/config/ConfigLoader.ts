@@ -84,6 +84,14 @@ export class ConfigLoader {
       semanticSimilarityThreshold: this.getOptionalNumber('SEMANTIC_SIMILARITY_THRESHOLD'),
       participateInVerification: this.getOptional('PARTICIPATE_IN_VERIFICATION', 'true') === 'true',
 
+      // Sybil Resistance configuration
+      enableSybilResistance: this.getOptional('ENABLE_SYBIL_RESISTANCE') === 'true',
+      dailyFreeLimit: this.getOptionalNumber('DAILY_FREE_LIMIT'),
+      excessDepositAmount: this.getOptionalNumber('EXCESS_DEPOSIT_AMOUNT'),
+      depositRefundDays: this.getOptionalNumber('DEPOSIT_REFUND_DAYS'),
+      enableSpamProofSubmission: this.getOptional('ENABLE_SPAM_PROOF_SUBMISSION') === 'true',
+      minSpamConfidence: this.getOptionalNumber('MIN_SPAM_CONFIDENCE'),
+
       // Logging
       logLevel: this.getLogLevel(),
     };
