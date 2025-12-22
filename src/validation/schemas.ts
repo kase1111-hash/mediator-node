@@ -83,7 +83,7 @@ export const DisputeDeclarationSchema = z.object({
   mediatorResponse: z.string().max(10000).optional(),
   resolution: z.string().max(10000).optional(),
   penalty: z.number().nonnegative().optional(),
-});
+}).passthrough(); // Allow additional fields from actual type
 
 export type ValidatedDisputeDeclaration = z.infer<typeof DisputeDeclarationSchema>;
 
@@ -156,7 +156,7 @@ export const EffortReceiptSchema = z.object({
   anchored: z.boolean(),
   anchorTxHash: z.string().max(256).optional(),
   metadata: z.record(z.unknown()).optional(),
-});
+}).passthrough(); // Allow additional fields from actual type
 
 export type ValidatedEffortReceipt = z.infer<typeof EffortReceiptSchema>;
 
@@ -321,6 +321,25 @@ export const ReputationRecordSchema = z.object({
 });
 
 export type ValidatedReputationRecord = z.infer<typeof ReputationRecordSchema>;
+
+// ============================================================================
+// Evidence & Frozen Item Schemas
+// ============================================================================
+
+export const FrozenItemSchema = z.object({
+  itemId: z.string().min(1).max(256),
+  disputeId: z.string().min(1).max(256),
+  itemType: z.enum(['intent', 'settlement', 'receipt', 'other']),
+  originalData: z.record(z.unknown()),
+  contentHash: z.string().min(1).max(256),
+  frozenAt: z.number().int().positive(),
+  frozenBy: z.string().min(1).max(256),
+  status: z.enum(['active', 'under_dispute', 'dispute_resolved']),
+  disputeResolution: z.string().max(10000).optional(),
+  metadata: z.record(z.unknown()).optional(),
+}).passthrough(); // Allow additional fields from actual type
+
+export type ValidatedFrozenItem = z.infer<typeof FrozenItemSchema>;
 
 // ============================================================================
 // Validation Utilities

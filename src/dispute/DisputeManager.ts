@@ -24,6 +24,13 @@ import {
   AuthorityDecision,
   SettlementDetails,
 } from './OutcomeRecorder';
+import { z } from 'zod';
+import {
+  DisputeDeclarationSchema,
+  readAllJSONFiles,
+  writeJSONFile,
+  buildSafeFilePath,
+} from '../validation';
 
 /**
  * Manages dispute declarations and lifecycle
@@ -474,49 +481,54 @@ No automated judgment is rendered by this system.
   }
 
   /**
-   * Save dispute to disk
+   * Save dispute to disk with validation and path safety
    */
   private saveDispute(dispute: DisputeDeclaration): void {
-    const filePath = path.join(this.dataPath, `${dispute.disputeId}.json`);
-
     try {
-      fs.writeFileSync(filePath, JSON.stringify(dispute, null, 2));
-    } catch (error) {
+      // SECURITY: Use safe file path building to prevent path traversal
+      const filePath = buildSafeFilePath(this.dataPath, dispute.disputeId, '.json');
+
+      // SECURITY: Validate dispute data before writing
+      writeJSONFile(filePath, dispute, DisputeDeclarationSchema as unknown as z.ZodType<DisputeDeclaration>, {
+        baseDir: this.dataPath,
+        createDir: true,
+      });
+
+      logger.debug('Dispute saved successfully', {
+        disputeId: dispute.disputeId,
+        filePath,
+      });
+    } catch (error: any) {
       logger.error('Error saving dispute', {
         disputeId: dispute.disputeId,
-        error,
+        error: error.message,
       });
+      throw error;
     }
   }
 
   /**
-   * Load all disputes from disk
+   * Load all disputes from disk with validation
    */
   private loadDisputes(): void {
-    if (!fs.existsSync(this.dataPath)) {
-      return;
-    }
-
     try {
-      const files = fs.readdirSync(this.dataPath);
+      // SECURITY: Use safe file operations with schema validation
+      const disputes = readAllJSONFiles(this.dataPath, DisputeDeclarationSchema as unknown as z.ZodType<DisputeDeclaration>, {
+        baseDir: this.dataPath,
+      });
 
-      for (const file of files) {
-        if (!file.endsWith('.json')) {
-          continue;
-        }
-
-        const filePath = path.join(this.dataPath, file);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const dispute: DisputeDeclaration = JSON.parse(content);
-
+      // Load validated disputes into memory
+      for (const dispute of disputes) {
         this.disputes.set(dispute.disputeId, dispute);
       }
 
       logger.info('Disputes loaded from disk', {
         count: this.disputes.size,
       });
-    } catch (error) {
-      logger.error('Error loading disputes', { error });
+    } catch (error: any) {
+      logger.error('Error loading disputes', {
+        error: error.message,
+      });
     }
   }
 

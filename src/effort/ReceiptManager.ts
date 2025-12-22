@@ -4,6 +4,13 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../utils/logger';
+import { z } from 'zod';
+import {
+  EffortReceiptSchema,
+  readAllJSONFiles,
+  writeJSONFile,
+  buildSafeFilePath,
+} from '../validation';
 
 /**
  * Constructs and manages effort receipts
@@ -200,49 +207,53 @@ export class ReceiptManager {
   }
 
   /**
-   * Save receipt to disk
+   * Save receipt to disk with validation
    */
   private saveReceipt(receipt: EffortReceipt): void {
-    const filePath = path.join(this.dataPath, `${receipt.receiptId}.json`);
-
     try {
-      fs.writeFileSync(filePath, JSON.stringify(receipt, null, 2));
-    } catch (error) {
+      // SECURITY: Use safe file path building to prevent path traversal
+      const filePath = buildSafeFilePath(this.dataPath, receipt.receiptId, '.json');
+
+      // SECURITY: Validate receipt data before writing
+      writeJSONFile(filePath, receipt, EffortReceiptSchema as unknown as z.ZodType<EffortReceipt>, {
+        baseDir: this.dataPath,
+        createDir: true,
+      });
+
+      logger.debug('Receipt saved successfully', {
+        receiptId: receipt.receiptId,
+      });
+    } catch (error: any) {
       logger.error('Error saving receipt', {
         receiptId: receipt.receiptId,
-        error,
+        error: error.message,
       });
+      throw error;
     }
   }
 
   /**
-   * Load all receipts from disk
+   * Load all receipts from disk with validation
    */
   private loadReceipts(): void {
-    if (!fs.existsSync(this.dataPath)) {
-      return;
-    }
-
     try {
-      const files = fs.readdirSync(this.dataPath);
+      // SECURITY: Use safe file operations with schema validation
+      const receipts = readAllJSONFiles(this.dataPath, EffortReceiptSchema as unknown as z.ZodType<EffortReceipt>, {
+        baseDir: this.dataPath,
+      });
 
-      for (const file of files) {
-        if (!file.endsWith('.json')) {
-          continue;
-        }
-
-        const filePath = path.join(this.dataPath, file);
-        const content = fs.readFileSync(filePath, 'utf-8');
-        const receipt: EffortReceipt = JSON.parse(content);
-
+      // Load validated receipts into memory
+      for (const receipt of receipts) {
         this.receipts.set(receipt.receiptId, receipt);
       }
 
       logger.info('Receipts loaded from disk', {
         count: this.receipts.size,
       });
-    } catch (error) {
-      logger.error('Error loading receipts', { error });
+    } catch (error: any) {
+      logger.error('Error loading receipts', {
+        error: error.message,
+      });
     }
   }
 
