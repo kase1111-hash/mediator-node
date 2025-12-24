@@ -95,6 +95,7 @@
               class="item-card"
               class:selected={selectedItem?.id === item.id || selectedItem?.disputeId === item.disputeId}
               on:click={() => selectedItem = selectedItem?.id === item.id ? null : item}
+              on:keydown={(e) => e.key === 'Enter' && (selectedItem = selectedItem?.id === item.id ? null : item)}
               role="button"
               tabindex="0"
             >

@@ -71,6 +71,7 @@
               class="intent-card"
               class:selected={selectedIntent?.hash === intent.hash}
               on:click={() => selectIntent(intent)}
+              on:keydown={(e) => e.key === 'Enter' && selectIntent(intent)}
               role="button"
               tabindex="0"
             >

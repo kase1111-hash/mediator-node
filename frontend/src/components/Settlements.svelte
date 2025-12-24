@@ -91,6 +91,7 @@
               class="settlement-card"
               class:selected={selectedSettlement?.id === settlement.id}
               on:click={() => selectSettlement(settlement)}
+              on:keydown={(e) => e.key === 'Enter' && selectSettlement(settlement)}
               role="button"
               tabindex="0"
             >
