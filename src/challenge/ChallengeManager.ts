@@ -1,5 +1,4 @@
 import { nanoid } from 'nanoid';
-import axios from 'axios';
 import {
   Challenge,
   ChallengeHistory,
@@ -9,21 +8,24 @@ import {
   MediatorConfig,
 } from '../types';
 import { logger } from '../utils/logger';
-import { generateSignature } from '../utils/crypto';
 import { ReputationTracker } from '../reputation/ReputationTracker';
+import { ChainClient } from '../chain';
 
 /**
  * ChallengeManager handles the submission and lifecycle of challenges
  * against proposed settlements
+ * Uses ChainClient for NatLangChain API compatibility
  */
 export class ChallengeManager {
   private config: MediatorConfig;
   private reputationTracker: ReputationTracker | null = null;
   private submittedChallenges: Map<string, ChallengeHistory> = new Map();
+  private chainClient: ChainClient;
 
-  constructor(config: MediatorConfig, reputationTracker?: ReputationTracker) {
+  constructor(config: MediatorConfig, reputationTracker?: ReputationTracker, chainClient?: ChainClient) {
     this.config = config;
     this.reputationTracker = reputationTracker || null;
+    this.chainClient = chainClient || ChainClient.fromConfig(config);
   }
 
   /**
@@ -48,32 +50,10 @@ export class ChallengeManager {
         status: 'pending',
       };
 
-      // Format as prose entry
-      const proseEntry = this.formatChallengeAsProse(challenge, settlement, analysis);
+      // Submit challenge using ChainClient
+      const result = await this.chainClient.submitChallenge(challenge);
 
-      // Sign the challenge
-      const signature = generateSignature(
-        JSON.stringify(challenge),
-        this.config.mediatorPrivateKey
-      );
-
-      // Submit to chain API
-      const response = await axios.post(
-        `${this.config.chainEndpoint}/api/v1/challenges`,
-        {
-          challenge,
-          prose: proseEntry,
-          signature,
-        },
-        {
-          timeout: 10000,
-          headers: {
-            'Content-Type': 'application/json',
-          },
-        }
-      );
-
-      if (response.status === 200 || response.status === 201) {
+      if (result.success) {
         logger.info('Challenge submitted successfully', {
           challengeId,
           settlementId: settlement.id,
@@ -99,14 +79,14 @@ export class ChallengeManager {
           timestamp,
         };
       } else {
-        logger.warn('Challenge submission failed with non-success status', {
-          status: response.status,
+        logger.warn('Challenge submission failed', {
+          error: result.error,
           challengeId,
         });
 
         return {
           success: false,
-          error: `HTTP ${response.status}: ${response.statusText}`,
+          error: result.error || 'Challenge submission failed',
           timestamp,
         };
       }
@@ -181,13 +161,11 @@ export class ChallengeManager {
           continue;
         }
 
-        // Fetch challenge status from chain
-        const response = await axios.get(
-          `${this.config.chainEndpoint}/api/v1/challenges/${challengeId}`
-        );
+        // Fetch challenge status using ChainClient
+        const statusResult = await this.chainClient.getChallengeStatus(challengeId);
 
-        if (response.data && response.data.status) {
-          const newStatus = response.data.status;
+        if (statusResult && statusResult.status) {
+          const newStatus = statusResult.status;
           const oldStatus = history.status;
 
           // Update local tracking

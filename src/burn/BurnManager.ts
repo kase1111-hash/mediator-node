@@ -1,10 +1,10 @@
-import axios from 'axios';
 import { randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { BurnTransaction, BurnType, MediatorConfig, UserSubmissionRecord } from '../types';
 import { logger } from '../utils/logger';
 import { BurnAnalytics } from './BurnAnalytics';
+import { ChainClient } from '../chain';
 
 /**
  * BurnManager handles all burn-related operations including:
@@ -13,6 +13,7 @@ import { BurnAnalytics } from './BurnAnalytics';
  * - Success burns (on settlement closure)
  * - Load-scaled burns
  * - User submission tracking
+ * Uses ChainClient for NatLangChain API compatibility
  */
 export class BurnManager {
   private config: MediatorConfig;
@@ -20,9 +21,11 @@ export class BurnManager {
   private burnHistory: BurnTransaction[] = [];
   private currentLoadMultiplier: number = 1.0;
   private dataPath: string;
+  private chainClient: ChainClient;
 
-  constructor(config: MediatorConfig) {
+  constructor(config: MediatorConfig, chainClient?: ChainClient) {
     this.config = config;
+    this.chainClient = chainClient || ChainClient.fromConfig(config);
     this.dataPath = path.join(process.cwd(), '.mediator-data', 'burns');
     this.ensureDataDirectory();
     this.loadSubmissionData();
@@ -223,15 +226,18 @@ export class BurnManager {
       timestamp: Date.now(),
     };
 
-    // Submit burn to chain
+    // Submit burn to chain using ChainClient
     try {
-      const response = await axios.post(
-        `${this.config.chainEndpoint}/api/v1/burns`,
-        burnTx
-      );
+      const result = await this.chainClient.submitBurn({
+        type: burnTx.type,
+        author: burnTx.author,
+        amount: burnTx.amount,
+        intentHash: burnTx.intentHash,
+        multiplier: burnTx.multiplier,
+      });
 
-      if (response.status === 200 || response.status === 201) {
-        burnTx.transactionHash = response.data.transactionHash;
+      if (result.success) {
+        burnTx.transactionHash = result.transactionId;
 
         // Update user record
         const record = this.getUserRecord(userId);
@@ -257,7 +263,7 @@ export class BurnManager {
       }
 
       logger.error('Burn transaction failed', {
-        status: response.status,
+        error: result.error,
         userId,
         intentHash,
       });
@@ -298,13 +304,15 @@ export class BurnManager {
     };
 
     try {
-      const response = await axios.post(
-        `${this.config.chainEndpoint}/api/v1/burns`,
-        burnTx
-      );
+      const result = await this.chainClient.submitBurn({
+        type: burnTx.type,
+        author: burnTx.author,
+        amount: burnTx.amount,
+        settlementId: burnTx.settlementId,
+      });
 
-      if (response.status === 200 || response.status === 201) {
-        burnTx.transactionHash = response.data.transactionHash;
+      if (result.success) {
+        burnTx.transactionHash = result.transactionId;
         this.burnHistory.push(burnTx);
         this.persistSubmissionData();
 
