@@ -1,6 +1,6 @@
 # Documentation Index
 
-**Last Updated:** December 22, 2025
+**Last Updated:** December 24, 2025
 
 This index provides a clear guide to all documentation in the mediator-node repository.
 
@@ -22,6 +22,12 @@ This index provides a clear guide to all documentation in the mediator-node repo
 
 ### Security
 - **[docs/SECURITY_HARDENING.md](./docs/SECURITY_HARDENING.md)** - Complete security audit and hardening guide
+
+### Community & Governance
+- **[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)** - Community standards and behavior guidelines
+- **[CONTRIBUTING.md](./CONTRIBUTING.md)** - Contribution guidelines and process
+- **[FAQ.md](./FAQ.md)** - Frequently asked questions about challenges and resilience
+- **[Founding-Contributor-Pledge.md](./Founding-Contributor-Pledge.md)** - Ethical commitments for contributors
 
 ---
 
@@ -61,6 +67,12 @@ All extension protocols are **fully implemented**. Standalone specification docu
 
 **...integrate with my chain**
 → Follow [INTEGRATION.md](./INTEGRATION.md)
+
+**...contribute to the project**
+→ Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
+
+**...understand the ethical commitments**
+→ Review [Founding-Contributor-Pledge.md](./Founding-Contributor-Pledge.md)
 
 ---
 
@@ -190,6 +202,6 @@ test/
 
 ---
 
-**Total Documentation:** 7 core docs + 5 protocol specs = 12 files
+**Total Documentation:** 11 core docs + 5 protocol specs = 16 files
 **Implementation Status:** All protocols (MP-01 through MP-06) fully implemented
 **Test Coverage:** 1261+ tests across all modules
