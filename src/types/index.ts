@@ -1,146 +1,570 @@
 /**
  * Core types for NatLangChain Mediator Node
+ *
+ * This module defines the core type system for the NatLangChain protocol,
+ * implementing the semantic governance framework defined in NCIP-000 through NCIP-015.
+ *
+ * @see NCIP-001 for the Canonical Term Registry
+ * @see NCIP-000 for Terminology & Semantics Governance
  */
 
+/**
+ * Consensus mode determines how settlements are validated and finalized.
+ *
+ * - `permissionless`: Pure Proof-of-Alignment + Reputation-based consensus.
+ *   Any mediator meeting minimum reputation can propose settlements.
+ *   Weight is calculated per NCIP-010 formula.
+ *
+ * - `dpos`: Delegated Proof-of-Stake with validator rotation.
+ *   Active validators are selected based on effective stake (own + delegated).
+ *   Rotation occurs per epoch as defined in the rotation config.
+ *
+ * - `poa`: Proof-of-Authority for permissioned environments.
+ *   Only pre-authorized mediators may submit proposals.
+ *   Requires authority signature for settlement submission.
+ *
+ * - `hybrid`: Configurable combination of DPoS and PoA.
+ *   Supports gradual transitions between consensus modes.
+ *
+ * @see NCIP-007 for Validator Trust Scoring & Reliability Weighting
+ * @see NCIP-010 for Mediator Reputation, Slashing & Market Dynamics
+ */
 export type ConsensusMode = 'permissionless' | 'dpos' | 'poa' | 'hybrid';
 
+/**
+ * Intent status tracks the lifecycle of a user's intent on-chain.
+ *
+ * An Intent is a human-authored expression of desired outcome or commitment,
+ * recorded as prose and treated as the primary semantic input to the protocol.
+ *
+ * - `pending`: Intent submitted, awaiting alignment with counterparty intent.
+ * - `accepted`: Intent has been matched and settlement proposed.
+ * - `rejected`: Intent was explicitly rejected by the author or counterparty.
+ * - `closed`: Intent has been successfully settled and finalized.
+ * - `unalignable`: Intent flagged as impossible to align (e.g., spam, incoherent).
+ *
+ * @see NCIP-001 for the canonical definition of "Intent"
+ * @see NCIP-002 for Semantic Drift Thresholds affecting intent interpretation
+ */
 export type IntentStatus = 'pending' | 'accepted' | 'rejected' | 'closed' | 'unalignable';
 
+/**
+ * Settlement status tracks the lifecycle of a proposed settlement.
+ *
+ * A Settlement is the resolution of an Agreement or Dispute resulting in
+ * final obligations, compensation, or closure (NCIP-001).
+ *
+ * - `proposed`: Settlement submitted by mediator, awaiting party acceptance.
+ * - `accepted`: Both parties have accepted the proposed terms.
+ * - `rejected`: One or both parties rejected the settlement.
+ * - `closed`: Settlement finalized and executed on-chain.
+ * - `challenged`: Settlement is under challenge review per MP-03.
+ *
+ * @see NCIP-001 for the canonical definition of "Settlement"
+ * @see NCIP-005 for Dispute Escalation & Semantic Locking
+ * @see NCIP-012 for Human Ratification UX requirements
+ */
 export type SettlementStatus = 'proposed' | 'accepted' | 'rejected' | 'closed' | 'challenged';
 
 /**
- * Represents a user's intent on the chain
+ * Represents a user's intent on the chain.
+ *
+ * An Intent is a human-authored expression of desired outcome or commitment,
+ * recorded as prose and treated as the primary semantic input to the
+ * NatLangChain protocol (NCIP-001). Intents are not executable by themselves;
+ * execution is always derived through the alignment and settlement process.
+ *
+ * Intents form the canonical audit trail and are subject to:
+ * - Semantic drift detection per NCIP-002
+ * - Temporal fixity binding per NCIP-001
+ * - Proof of Understanding validation per NCIP-004
+ *
+ * @see NCIP-001 for the canonical definition of "Intent"
+ * @see NCIP-002 for Semantic Drift Thresholds
+ * @see NCIP-004 for Proof of Understanding requirements
  */
 export interface Intent {
+  /** Unique cryptographic hash identifying this intent on-chain */
   hash: string;
+
+  /** Public key or identifier of the human author */
   author: string;
+
+  /**
+   * Natural language prose describing the intent.
+   * This is the primary semantic content subject to drift analysis.
+   * @see NCIP-002 for how prose is evaluated for semantic drift
+   */
   prose: string;
+
+  /**
+   * Explicit list of desired outcomes.
+   * Desires are positive goals the author wants to achieve.
+   */
   desires: string[];
+
+  /**
+   * Explicit list of constraints or limitations.
+   * Constraints are boundaries that must not be violated in any settlement.
+   * Violation of constraints triggers challenge eligibility per MP-03.
+   */
   constraints: string[];
+
+  /**
+   * Optional facilitation fee offered for mediator alignment.
+   * Subject to burn economics per MP-06 Observance-Burn.
+   */
   offeredFee?: number;
+
+  /** Unix timestamp when intent was submitted on-chain */
   timestamp: number;
+
+  /** Current lifecycle status of the intent */
   status: IntentStatus;
-  branch?: string; // e.g., "Professional/Engineering"
-  flagCount?: number; // For unalignable tracking
+
+  /**
+   * Optional semantic branch categorization.
+   * Example: "Professional/Engineering", "Personal/Services"
+   */
+  branch?: string;
+
+  /**
+   * Count of flags for unalignable tracking.
+   * Used in sybil resistance and spam detection.
+   */
+  flagCount?: number;
 }
 
 /**
- * Proposed Settlement structure
+ * Proposed Settlement structure.
+ *
+ * A ProposedSettlement represents a mediator's proposal for resolving
+ * aligned intents between two parties. The settlement includes:
+ * - Reasoning trace for transparency and auditability
+ * - Proposed terms derived from intent analysis
+ * - Facilitation fee structure per MP-01
+ * - Consensus-mode-specific fields (DPoS stake, PoA signature)
+ *
+ * Settlements are subject to:
+ * - Human ratification requirements per NCIP-012
+ * - Challenge windows per MP-03
+ * - Semantic consensus verification for high-value settlements
+ * - Cooling periods before finalization
+ *
+ * @see NCIP-001 for the canonical definition of "Settlement"
+ * @see NCIP-010 for Mediator Reputation & Slashing
+ * @see NCIP-012 for Human Ratification UX constraints
+ * @see MP-01 for Negotiation & Ratification protocol
  */
 export interface ProposedSettlement {
+  /** Unique identifier for this settlement proposal */
   id: string;
+
+  /** Hash of the first party's intent */
   intentHashA: string;
+
+  /** Hash of the second party's intent */
   intentHashB: string;
+
+  /**
+   * LLM-generated reasoning trace explaining the settlement.
+   * Provides transparency into how terms were derived from intents.
+   * Subject to semantic drift analysis per NCIP-002.
+   */
   reasoningTrace: string;
+
+  /**
+   * Proposed settlement terms derived from intent alignment.
+   * Subject to cognitive load limits per NCIP-012:
+   * - Simple agreements: max 7 semantic units
+   * - Financial settlements: max 9 semantic units
+   */
   proposedTerms: {
+    /** Agreed price or compensation */
     price?: number;
+    /** List of deliverables to be provided */
     deliverables?: string[];
+    /** Timeline description for delivery */
     timelines?: string;
+    /** Reference to escrow contract if applicable */
     escrowReference?: string;
+    /** Additional custom terms */
     customTerms?: Record<string, any>;
   };
+
+  /**
+   * Absolute facilitation fee amount.
+   * Subject to burn economics per MP-06.
+   */
   facilitationFee: number;
+
+  /**
+   * Facilitation fee as percentage of settlement value.
+   * Affects mediator reputation scoring per NCIP-010.
+   */
   facilitationFeePercent: number;
+
+  /**
+   * SHA-256 hash of the LLM prompt and response.
+   * Enables reproducibility verification of the reasoning trace.
+   */
   modelIntegrityHash: string;
+
+  /** Identifier of the mediator who proposed this settlement */
   mediatorId: string;
+
+  /** Unix timestamp when settlement was proposed */
   timestamp: number;
+
+  /** Current lifecycle status of the settlement */
   status: SettlementStatus;
+
+  /**
+   * Deadline for party acceptance (Unix timestamp).
+   * Default: 72 hours from proposal per protocol config.
+   */
   acceptanceDeadline: number;
 
-  // DPoS fields
+  // DPoS consensus fields
+  /**
+   * Reference to staked tokens backing this proposal.
+   * Required when consensusMode is 'dpos' or 'hybrid'.
+   * @see NCIP-007 for validator trust scoring
+   */
   stakeReference?: string;
+
+  /** Reference to delegations contributing to effective stake */
   delegationReference?: string;
+
+  /**
+   * Total effective stake (own + delegated).
+   * Used for validator rotation and weighting.
+   */
   effectiveStake?: number;
 
-  // PoA fields
+  // PoA consensus fields
+  /**
+   * Cryptographic signature from authorized authority.
+   * Required when consensusMode is 'poa'.
+   */
   authoritySignature?: string;
 
-  // Tracking
+  // Party acceptance tracking
+  /** Whether party A has accepted the settlement */
   partyAAccepted?: boolean;
+
+  /** Whether party B has accepted the settlement */
   partyBAccepted?: boolean;
+
+  /**
+   * Challenges submitted against this settlement.
+   * @see MP-03 for Dispute & Escalation Protocol
+   */
   challenges?: Challenge[];
 
   // Semantic Consensus Verification
+  /**
+   * Whether this settlement requires multi-mediator verification.
+   * Triggered when settlement value exceeds highValueThreshold.
+   */
   requiresVerification?: boolean;
+
+  /** Verification request sent to selected verifiers */
   verificationRequest?: VerificationRequest;
+
+  /** Responses from verifier mediators */
   verificationResponses?: VerificationResponse[];
+
+  /** Current status of semantic consensus verification */
   verificationStatus?: VerificationStatus;
 }
 
 /**
- * Challenge against a proposed settlement
+ * Challenge against a proposed settlement.
+ *
+ * A Challenge is a formally raised assertion of misinterpretation,
+ * constraint violation, or semantic contradiction in a settlement.
+ * Challenges are governed by MP-03 Dispute & Escalation Protocol.
+ *
+ * Challenge outcomes affect mediator reputation:
+ * - Upheld challenges: Mediator reputation decreases
+ * - Rejected challenges: Challenger's reputation may decrease
+ *
+ * @see NCIP-001 for the canonical definition of "Dispute" (synonym: challenge)
+ * @see NCIP-005 for Dispute Escalation & Semantic Locking
+ * @see NCIP-010 for reputation impact of challenge outcomes
+ * @see MP-03 for Dispute & Escalation Protocol
  */
 export interface Challenge {
+  /** Unique identifier for this challenge */
   id: string;
+
+  /** ID of the settlement being challenged */
   settlementId: string;
+
+  /** Public key or identifier of the party submitting the challenge */
   challengerId: string;
+
+  /**
+   * Natural language proof of contradiction.
+   * Explains how the settlement violates original intent constraints.
+   * Subject to semantic drift analysis per NCIP-002.
+   */
   contradictionProof: string;
+
+  /**
+   * LLM-generated paraphrase demonstrating the violation.
+   * Provides independent evidence supporting the contradiction claim.
+   */
   paraphraseEvidence: string;
+
+  /** Unix timestamp when challenge was submitted */
   timestamp: number;
+
+  /**
+   * Current status of the challenge.
+   * - `pending`: Challenge under validator review
+   * - `upheld`: Challenge validated, settlement invalidated
+   * - `rejected`: Challenge dismissed, settlement stands
+   */
   status: 'pending' | 'upheld' | 'rejected';
+
+  /**
+   * List of validator IDs reviewing this challenge.
+   * Validator trust scores affect challenge outcome weighting.
+   * @see NCIP-007 for Validator Trust Scoring
+   */
   validators?: string[];
 }
 
 /**
- * Mediator reputation counters
+ * Mediator reputation counters.
+ *
+ * Tracks the on-chain behavior that determines mediator trustworthiness.
+ * Mediators earn influence only by being repeatedly correct, aligned, and non-coercive.
+ *
+ * Reputation Weight Formula (MP-01):
+ * ```
+ * Weight = (Successful_Closures + Failed_Challenges × 2) /
+ *          (1 + Upheld_Challenges_Against + Forfeited_Fees)
+ * ```
+ *
+ * Reputation affects:
+ * - Proposal visibility and ranking
+ * - Validator weighting during consensus
+ * - Market selection probability
+ * - Eligibility for high-value settlements
+ *
+ * Mediators can NEVER:
+ * - Have authority to finalize agreements
+ * - Override parties or validators
+ * - Transfer or inject off-chain reputation
+ *
+ * @see NCIP-010 for Mediator Reputation, Slashing & Market Dynamics
+ * @see NCIP-007 for Validator Trust Scoring integration
+ * @see MP-01 for Negotiation & Ratification protocol
  */
 export interface MediatorReputation {
+  /** Unique identifier of the mediator */
   mediatorId: string;
+
+  /**
+   * Count of settlements successfully closed.
+   * Increases weight numerator.
+   */
   successfulClosures: number;
-  failedChallenges: number; // Challenges submitted that were rejected
-  upheldChallengesAgainst: number; // Challenges against this mediator that were upheld
+
+  /**
+   * Challenges submitted by this mediator that were rejected.
+   * Counter-intuitively positive: shows mediator can identify issues
+   * even when not upheld (weighted × 2 in formula).
+   */
+  failedChallenges: number;
+
+  /**
+   * Challenges against this mediator's settlements that were upheld.
+   * Increases weight denominator, reducing overall score.
+   * Triggers slashing per NCIP-010 slashable offenses.
+   */
+  upheldChallengesAgainst: number;
+
+  /**
+   * Count of facilitation fees forfeited due to settlement rejection.
+   * Increases weight denominator, reducing overall score.
+   */
   forfeitedFees: number;
-  weight: number; // Calculated weight
+
+  /**
+   * Calculated reputation weight using MP-01 formula.
+   * Affects proposal ranking and validator attention.
+   * Maximum effective weight capped at 0.35 per NCIP-007.
+   */
+  weight: number;
+
+  /** Unix timestamp of last reputation update */
   lastUpdated: number;
 }
 
 /**
- * Stake information for DPoS
+ * Stake information for DPoS consensus mode.
+ *
+ * In DPoS mode, mediators must post a reputation bond (stake) to participate.
+ * Effective stake determines validator rotation priority and proposal weighting.
+ *
+ * Unbonded mediators MAY observe but MAY NOT submit proposals.
+ *
+ * @see NCIP-007 for how stake affects validator trust weighting
+ * @see NCIP-010 for stake slashing conditions
  */
 export interface Stake {
+  /** Mediator ID this stake belongs to */
   mediatorId: string;
+
+  /** Direct stake amount posted by the mediator (in NLC tokens) */
   amount: number;
+
+  /** Total stake delegated to this mediator by others */
   delegatedAmount: number;
+
+  /**
+   * Effective stake = own stake + delegated stake.
+   * Determines rotation priority in DPoS validator selection.
+   */
   effectiveStake: number;
+
+  /** List of delegations contributing to delegatedAmount */
   delegators: Delegation[];
-  unbondingPeriod: number; // milliseconds
+
+  /**
+   * Unbonding period in milliseconds.
+   * Stake cannot be withdrawn until this period elapses after unbonding request.
+   */
+  unbondingPeriod: number;
+
+  /**
+   * Current stake status.
+   * - `bonded`: Active stake, can participate in consensus
+   * - `unbonding`: Withdrawal requested, in cooldown period
+   * - `unbonded`: Stake released, no longer participating
+   */
   status: 'bonded' | 'unbonding' | 'unbonded';
 }
 
 /**
- * Delegation information
+ * Delegation information for DPoS consensus.
+ *
+ * Token holders can delegate stake to mediators they trust,
+ * increasing the mediator's effective stake and earning delegation rewards.
+ *
+ * Delegation does NOT transfer authority—delegators only affect weight,
+ * not the mediator's ability to make decisions.
+ *
+ * @see NCIP-007 for how delegations affect validator weighting
+ * @see MP-04 for full Licensing & Delegation Protocol
  */
 export interface Delegation {
+  /** Public key or ID of the delegating party */
   delegatorId: string;
+
+  /** Mediator receiving the delegation */
   mediatorId: string;
+
+  /** Amount delegated (in NLC tokens) */
   amount: number;
+
+  /** Unix timestamp when delegation was created */
   timestamp: number;
+
+  /**
+   * Current delegation status.
+   * - `active`: Delegation in effect, contributing to effective stake
+   * - `undelegating`: Withdrawal requested, in cooldown period
+   * - `withdrawn`: Delegation ended, tokens returned
+   */
   status: 'active' | 'undelegating' | 'withdrawn';
+
+  /** Unix timestamp when undelegation completes (if undelegating) */
   undelegationDeadline?: number;
 }
 
 /**
- * Governance proposal
+ * Governance proposal for on-chain protocol changes.
+ *
+ * Governance proposals enable stake-weighted voting on protocol parameters,
+ * authority changes, and consensus mode transitions. The governance system
+ * ensures no single party can unilaterally change protocol behavior.
+ *
+ * Proposal lifecycle:
+ * 1. Submission (requires minimum stake)
+ * 2. Voting period (default: 7 days)
+ * 3. Execution delay (default: 3 days after passing)
+ * 4. Execution (automatic if passed and delay elapsed)
+ *
+ * @see NCIP-014 for Protocol Amendments & Constitutional Change
+ * @see NCIP-008 for how precedent affects governance decisions
  */
 export interface GovernanceProposal {
+  /** Unique proposal identifier */
   id: string;
+
+  /** Public key of the mediator submitting the proposal */
   proposerId: string;
+
+  /** Human-readable proposal title */
   title: string;
+
+  /** Detailed description of the proposed change */
   description: string;
+
+  /**
+   * Type of governance action being proposed.
+   * - `parameter_change`: Modify protocol parameters (fees, thresholds, etc.)
+   * - `authority_add`: Add new authority in PoA/hybrid mode
+   * - `authority_remove`: Remove existing authority
+   * - `mode_transition`: Change consensus mode (e.g., dpos → hybrid)
+   */
   proposalType: 'parameter_change' | 'authority_add' | 'authority_remove' | 'mode_transition';
+
+  /** Parameters to change if proposalType is 'parameter_change' */
   parameters?: Record<string, any>;
+
+  /** Unix timestamp when voting period ends */
   votingPeriodEnd: number;
+
+  /** Delay in milliseconds between passing and execution */
   executionDelay: number;
-  executionTime?: number; // When proposal can be executed (after delay)
+
+  /** Unix timestamp when proposal can be executed (after delay) */
+  executionTime?: number;
+
+  /**
+   * Current proposal status.
+   * - `voting`: Active voting period
+   * - `passed`: Voting complete, approval threshold met
+   * - `rejected`: Voting complete, approval threshold not met
+   * - `executed`: Proposal changes applied
+   * - `expired`: Passed but not executed within allowed window
+   */
   status: 'voting' | 'passed' | 'rejected' | 'executed' | 'expired';
+
+  /** Stake-weighted vote tallies */
   votes: {
+    /** Total stake voting in favor */
     for: number;
+    /** Total stake voting against */
     against: number;
+    /** Total stake abstaining */
     abstain: number;
   };
+
+  /** Minimum participation required for valid vote (percentage of total stake) */
   quorumRequired: number;
+
+  /** Unix timestamp when proposal was submitted */
   timestamp: number;
-  prose?: string; // Prose description for chain submission
+
+  /** Optional prose description for chain submission */
+  prose?: string;
 }
 
 /**
@@ -237,23 +661,68 @@ export interface GovernableParameters {
 }
 
 /**
- * Burn transaction types
+ * Burn transaction types per MP-06 Observance-Burn protocol.
+ *
+ * Burns create economic pressure that:
+ * - Discourages spam and low-effort intents
+ * - Scales costs with system load
+ * - Rewards successful settlements with lower net cost
+ *
+ * - `base_filing`: Standard burn for intent submission
+ * - `escalated`: Increased burn for high-frequency submitters (exponential)
+ * - `success`: Partial burn rebate on successful settlement
+ * - `load_scaled`: Dynamic burn based on current system load
+ *
+ * @see MP-06 for Behavioral Pressure & Anti-Entropy Controls
  */
 export type BurnType = 'base_filing' | 'escalated' | 'success' | 'load_scaled';
 
 /**
- * Burn transaction record
+ * Burn transaction record.
+ *
+ * Records every token burn event for transparency and analytics.
+ * Burns flow to the treasury and fund:
+ * - Defensive dispute subsidies
+ * - Escalation bounty pools
+ * - Harassment-mitigation reserves
+ *
+ * This creates a closed accountability loop:
+ * "Bad mediation funds protection against bad mediation." (NCIP-010)
+ *
+ * @see MP-06 for Behavioral Pressure & Anti-Entropy Controls
+ * @see NCIP-010 for how burns interact with mediator reputation
  */
 export interface BurnTransaction {
+  /** Unique burn transaction identifier */
   id: string;
+
+  /** Type of burn event */
   type: BurnType;
-  author: string; // Identity that triggered the burn
-  amount: number; // Amount of tokens burned
-  intentHash?: string; // Associated intent (if applicable)
-  settlementId?: string; // Associated settlement (if applicable)
-  multiplier?: number; // Multiplier applied (for escalated/load-scaled)
+
+  /** Public key or ID of the party whose action triggered the burn */
+  author: string;
+
+  /** Amount of NLC tokens burned */
+  amount: number;
+
+  /** Hash of associated intent (for base_filing, escalated burns) */
+  intentHash?: string;
+
+  /** ID of associated settlement (for success burns) */
+  settlementId?: string;
+
+  /**
+   * Multiplier applied to base burn amount.
+   * For escalated: 2^(submission_count - free_allowance)
+   * For load_scaled: based on current system load factor
+   */
+  multiplier?: number;
+
+  /** Unix timestamp of burn execution */
   timestamp: number;
-  transactionHash?: string; // On-chain transaction reference
+
+  /** On-chain transaction hash for verification */
+  transactionHash?: string;
 }
 
 /**
@@ -589,12 +1058,31 @@ export interface ChallengeHistory {
   lastChecked: number;
 }
 
-/**
- * Semantic Consensus Verification Types
- */
+// ============================================================================
+// Semantic Consensus Verification Types
+//
+// Multi-mediator verification ensures high-value settlements have been
+// independently validated by multiple parties. Verifiers produce semantic
+// summaries that are compared for equivalence using embedding similarity.
+//
+// This implements the multi-model consensus requirement from NCIP-007,
+// preventing single-validator capture and ensuring reliability.
+//
+// @see NCIP-007 for Validator Trust Scoring & Reliability Weighting
+// @see NCIP-002 for Semantic Drift Thresholds
+// ============================================================================
 
 /**
- * Status of semantic consensus verification
+ * Status of semantic consensus verification.
+ *
+ * - `pending`: Waiting for verification responses
+ * - `in_progress`: Verifiers selected, awaiting responses
+ * - `consensus_reached`: 3+ semantically equivalent summaries received
+ * - `consensus_failed`: Failed to reach consensus threshold
+ * - `timeout`: Verification deadline passed without consensus
+ * - `not_required`: Settlement value below verification threshold
+ *
+ * @see NCIP-007 for multi-validator consensus requirements
  */
 export type VerificationStatus =
   | 'pending'           // Waiting for verification responses
@@ -605,58 +1093,143 @@ export type VerificationStatus =
   | 'not_required';     // Settlement below threshold
 
 /**
- * Request for semantic verification from selected mediators
+ * Request for semantic verification from selected mediators.
+ *
+ * When a settlement exceeds the highValueThreshold, verification requests
+ * are sent to randomly selected mediators (weighted by trust score).
+ * Verifiers independently summarize the settlement semantics.
+ *
+ * @see NCIP-007 for verifier selection weighting
  */
 export interface VerificationRequest {
+  /** ID of the settlement requiring verification */
   settlementId: string;
+
+  /** Mediator ID requesting verification */
   requesterId: string;
+
+  /** Hash of intent A in the settlement */
   intentHashA: string;
+
+  /** Hash of intent B in the settlement */
   intentHashB: string;
+
+  /** Proposed terms to be verified */
   proposedTerms: ProposedSettlement['proposedTerms'];
+
+  /** Settlement value (determines if verification is required) */
   settlementValue: number;
-  selectedVerifiers: string[]; // 5 mediator IDs selected via weighted random
+
+  /** 5 mediator IDs selected via weighted random (by trust score) */
+  selectedVerifiers: string[];
+
+  /** Unix timestamp when verification was requested */
   requestedAt: number;
-  responseDeadline: number; // Timestamp
+
+  /** Unix timestamp deadline for responses */
+  responseDeadline: number;
+
+  /** Cryptographic signature of the request */
   signature: string;
 }
 
 /**
- * Response from a verifier mediator
+ * Response from a verifier mediator.
+ *
+ * Each verifier independently produces a semantic summary of the settlement,
+ * which is converted to an embedding vector for similarity comparison.
+ * Summaries are compared for semantic equivalence, not textual equality.
+ *
+ * @see NCIP-002 for semantic comparison thresholds
+ * @see NCIP-007 for verifier trust weighting
  */
 export interface VerificationResponse {
+  /** ID of the settlement being verified */
   settlementId: string;
+
+  /** ID of the verifier mediator */
   verifierId: string;
-  semanticSummary: string; // Natural language summary of settlement semantics
-  summaryEmbedding: number[]; // Embedding vector for similarity comparison
-  approves: boolean; // Whether verifier approves the settlement
-  confidence: number; // 0-1, verifier's confidence in their summary
+
+  /** Natural language summary of settlement semantics */
+  semanticSummary: string;
+
+  /** Embedding vector for similarity comparison */
+  summaryEmbedding: number[];
+
+  /** Whether verifier approves the settlement */
+  approves: boolean;
+
+  /** Verifier's confidence in their summary (0-1) */
+  confidence: number;
+
+  /** Unix timestamp of response */
   timestamp: number;
+
+  /** Cryptographic signature of the response */
   signature: string;
 }
 
 /**
- * Result of semantic equivalence check between summaries
+ * Result of semantic equivalence check between two summaries.
+ *
+ * Equivalence is determined by cosine similarity of embedding vectors,
+ * not textual comparison. This allows for different wording while
+ * ensuring semantic agreement.
+ *
+ * @see NCIP-002 for semantic similarity thresholds (default: 0.85)
  */
 export interface SemanticEquivalenceResult {
+  /** First summary being compared */
   summary1: string;
+
+  /** Second summary being compared */
   summary2: string;
-  cosineSimilarity: number; // 0-1
-  areEquivalent: boolean; // true if similarity >= threshold
-  threshold: number; // The threshold used for comparison
+
+  /** Cosine similarity of embedding vectors (0-1) */
+  cosineSimilarity: number;
+
+  /** Whether summaries are semantically equivalent */
+  areEquivalent: boolean;
+
+  /** Similarity threshold used for comparison (default: 0.85) */
+  threshold: number;
 }
 
 /**
- * Complete verification record for a settlement
+ * Complete verification record for a settlement.
+ *
+ * Aggregates all verification requests, responses, and equivalence checks
+ * for a single settlement. Consensus requires 3+ semantically equivalent
+ * summaries from independent verifiers.
+ *
+ * @see NCIP-007 for consensus requirements
  */
 export interface SemanticVerification {
+  /** ID of the settlement being verified */
   settlementId: string;
+
+  /** Current verification status */
   status: VerificationStatus;
+
+  /** Original verification request */
   request: VerificationRequest;
+
+  /** Responses from verifier mediators */
   responses: VerificationResponse[];
+
+  /** Pairwise equivalence comparisons between summaries */
   equivalenceResults: SemanticEquivalenceResult[];
+
+  /** Whether consensus was reached */
   consensusReached: boolean;
-  consensusCount: number; // Number of semantically equivalent summaries
-  requiredConsensus: number; // Typically 3
+
+  /** Number of semantically equivalent summaries found */
+  consensusCount: number;
+
+  /** Required number for consensus (default: 3) */
+  requiredConsensus: number;
+
+  /** Unix timestamp when verification completed */
   completedAt?: number;
 }
 
@@ -722,82 +1295,219 @@ export interface SubmissionLimitResult {
 
 // ============================================================================
 // MP-02: Proof-of-Effort Receipt Protocol Types
+//
+// The Proof-of-Effort system provides cryptographic attestation that work
+// actually occurred, enabling fair attribution and preventing claims of
+// effort without evidence. Receipts form the foundation for MP-05 settlements.
+//
+// @see MP-02-spec.md for full protocol specification
+// @see NCIP-004 for Proof of Understanding integration
 // ============================================================================
 
 /**
- * Signal modality types
+ * Signal modality types for effort capture.
+ *
+ * Different modalities represent different forms of observable work:
+ * - `text_edit`: Text editing activity (files, documents)
+ * - `command`: Shell/CLI commands executed
+ * - `voice`: Voice input or transcriptions
+ * - `structured_tool`: Tool invocations with structured output
+ * - `other`: Custom or undefined modality
+ *
+ * @see MP-02 for signal capture requirements
  */
 export type SignalModality = 'text_edit' | 'command' | 'voice' | 'structured_tool' | 'other';
 
 /**
- * Raw observable trace of effort
+ * Raw observable trace of effort.
+ *
+ * A Signal is the atomic unit of observable work in the Proof-of-Effort system.
+ * Signals are captured by observers, hashed for integrity, and grouped into
+ * EffortSegments for LLM validation.
+ *
+ * Signals are encrypted at rest when effortEncryptSignals is enabled.
+ *
+ * @see MP-02 for signal capture and privacy requirements
  */
 export interface Signal {
-  signalId: string; // Unique signal identifier
+  /** Unique identifier for this signal */
+  signalId: string;
+
+  /** Type of work this signal represents */
   modality: SignalModality;
+
+  /** Unix timestamp when signal was captured */
   timestamp: number;
-  content: string; // Raw signal content
-  metadata?: Record<string, any>; // Additional context (file path, command, etc.)
-  hash: string; // SHA-256 hash of content
+
+  /** Raw signal content (encrypted at rest if configured) */
+  content: string;
+
+  /** Additional context (file path, working directory, etc.) */
+  metadata?: Record<string, any>;
+
+  /** SHA-256 hash of content for integrity verification */
+  hash: string;
 }
 
 /**
- * Effort segment status
+ * Effort segment status in the validation pipeline.
+ *
+ * - `active`: Segment is still receiving signals
+ * - `complete`: Segment boundary reached, ready for validation
+ * - `validated`: LLM has assessed the segment
+ * - `anchored`: Receipt has been recorded on-chain
+ *
+ * @see MP-02 for segment lifecycle
  */
 export type SegmentStatus = 'active' | 'complete' | 'validated' | 'anchored';
 
 /**
- * Bounded time slice of signals treated as unit of analysis
+ * Bounded time slice of signals treated as unit of analysis.
+ *
+ * Segments group related signals for LLM validation. Segmentation can be:
+ * - Time-based (fixed window duration)
+ * - Activity-based (gaps in activity trigger boundaries)
+ * - Hybrid (combination of both)
+ * - Human-marked (explicit boundaries from the user)
+ *
+ * @see MP-02 for segmentation strategies
  */
 export interface EffortSegment {
+  /** Unique segment identifier */
   segmentId: string;
+
+  /** Unix timestamp when segment began */
   startTime: number;
+
+  /** Unix timestamp when segment ended */
   endTime: number;
+
+  /** Signals contained in this segment */
   signals: Signal[];
+
+  /** Current segment status */
   status: SegmentStatus;
-  humanMarker?: string; // Optional human-provided marker
-  segmentationRule: string; // How this segment was created (time_window, activity_boundary, human_marker)
+
+  /** Optional human-provided marker or description */
+  humanMarker?: string;
+
+  /**
+   * How this segment was created.
+   * Values: 'time_window', 'activity_boundary', 'human_marker'
+   */
+  segmentationRule: string;
 }
 
 /**
- * Validation assessment from LLM
+ * Validation assessment from LLM for an effort segment.
+ *
+ * The LLM evaluates segments across multiple dimensions to determine
+ * whether the work is coherent, progressive, and original. This prevents
+ * fraudulent effort claims while respecting human work patterns.
+ *
+ * @see MP-02 for validation criteria and thresholds
+ * @see NCIP-007 for validator trust scoring
  */
 export interface ValidationAssessment {
-  validatorId: string; // LLM model identifier
+  /** LLM model identifier that performed validation */
+  validatorId: string;
+
+  /** Specific model version for reproducibility */
   modelVersion: string;
+
+  /** Unix timestamp of validation */
   timestamp: number;
-  coherenceScore: number; // 0-1, linguistic coherence
-  progressionScore: number; // 0-1, conceptual progression
-  consistencyScore: number; // 0-1, internal consistency
-  synthesisScore: number; // 0-1, synthesis vs duplication (0=duplicate, 1=original)
-  summary: string; // Deterministic effort summary
-  uncertaintyFlags: string[]; // Areas of uncertainty or ambiguity
-  evidence: string; // Supporting evidence for scores
+
+  /** Linguistic coherence score (0-1): Is the work linguistically consistent? */
+  coherenceScore: number;
+
+  /** Conceptual progression score (0-1): Does the work show logical progression? */
+  progressionScore: number;
+
+  /** Internal consistency score (0-1): Are there contradictions? */
+  consistencyScore: number;
+
+  /** Synthesis score (0-1): 0=duplicated, 1=original synthesis */
+  synthesisScore: number;
+
+  /** Deterministic summary of the effort for receipt */
+  summary: string;
+
+  /** Areas where LLM expressed uncertainty */
+  uncertaintyFlags: string[];
+
+  /** Supporting evidence for the scores */
+  evidence: string;
 }
 
 /**
- * Receipt status
+ * Receipt status in the anchoring pipeline.
+ *
+ * - `draft`: Receipt created but not yet validated
+ * - `validated`: LLM assessment complete
+ * - `anchored`: Recorded on-chain/ledger
+ * - `verified`: Independent verification complete
+ *
+ * @see MP-02 for receipt lifecycle
  */
 export type ReceiptStatus = 'draft' | 'validated' | 'anchored' | 'verified';
 
 /**
- * Cryptographic record attesting effort occurred
+ * Cryptographic record attesting effort occurred.
+ *
+ * An EffortReceipt is the immutable proof that work was performed,
+ * validated by an LLM, and anchored to a ledger. Receipts are referenced
+ * in MP-05 settlements as evidence of contribution.
+ *
+ * Receipts can chain together via priorReceipts for continuous work sessions.
+ *
+ * @see MP-02 for receipt generation and verification
+ * @see MP-05 for how receipts inform settlements
  */
 export interface EffortReceipt {
-  receiptId: string; // UUID + hash
+  /** Unique receipt identifier (UUID + hash) */
+  receiptId: string;
+
+  /** ID of the segment this receipt attests */
   segmentId: string;
+
+  /** Unix timestamp when effort began */
   startTime: number;
+
+  /** Unix timestamp when effort ended */
   endTime: number;
-  signalHashes: string[]; // Hashes of all signals in segment
+
+  /** SHA-256 hashes of all signals in the segment */
+  signalHashes: string[];
+
+  /** LLM validation assessment */
   validation: ValidationAssessment;
-  observerId: string; // System/component that captured signals
-  validatorId: string; // LLM model that validated
-  receiptHash: string; // SHA-256 of receipt contents
+
+  /** System/component that captured the signals */
+  observerId: string;
+
+  /** LLM model that validated the effort */
+  validatorId: string;
+
+  /** SHA-256 hash of receipt contents for integrity */
+  receiptHash: string;
+
+  /** Current receipt status */
   status: ReceiptStatus;
-  anchoredAt?: number; // Timestamp when anchored to ledger
-  ledgerReference?: string; // Chain/ledger reference
-  priorReceipts?: string[]; // References to previous receipts
-  externalArtifacts?: string[]; // References to external work products
+
+  /** Unix timestamp when anchored to ledger */
+  anchoredAt?: number;
+
+  /** On-chain transaction or ledger reference */
+  ledgerReference?: string;
+
+  /** References to previous receipts in the chain */
+  priorReceipts?: string[];
+
+  /** References to external work products (PRs, documents, etc.) */
+  externalArtifacts?: string[];
+
+  /** Additional metadata */
   metadata?: Record<string, any>;
 }
 
@@ -831,68 +1541,170 @@ export interface EffortCaptureConfig {
 
 // ============================================================================
 // MP-03: Dispute & Escalation Protocol Types
+//
+// MP-03 provides structured dispute resolution that preserves human authority
+// while enabling AI-assisted clarification. Disputes can escalate to external
+// authorities (arbitrators, DAOs, courts) with complete evidence packages.
+//
+// Key constraints:
+// - Escalation MUST be human-authored (per NCIP-012)
+// - Evidence is frozen when dispute is declared
+// - Cooling periods apply per NCIP-012 (6 hours for dispute escalation)
+//
+// @see MP-03-spec.md for full protocol specification
+// @see NCIP-005 for Dispute Escalation & Semantic Locking
+// @see NCIP-012 for Human Ratification UX constraints
 // ============================================================================
 
 /**
- * Dispute status
+ * Dispute status tracks the lifecycle of a formal dispute.
+ *
+ * - `initiated`: Dispute declared by claimant
+ * - `under_review`: Evidence being reviewed by validators
+ * - `clarifying`: Optional mediator-assisted clarification phase
+ * - `escalated`: Escalated to external authority
+ * - `resolved`: Resolution recorded and finalized
+ * - `dismissed`: Dispute dismissed without resolution
+ *
+ * @see NCIP-005 for status transitions and semantic locking
  */
 export type DisputeStatus = 'initiated' | 'under_review' | 'clarifying' | 'escalated' | 'resolved' | 'dismissed';
 
 /**
- * Dispute party role
+ * Role of a party in a dispute.
+ *
+ * - `claimant`: Party initiating the dispute
+ * - `respondent`: Party being accused or challenged
+ *
+ * @see MP-03 for party rights and responsibilities
  */
 export type DisputePartyRole = 'claimant' | 'respondent';
 
 /**
- * Dispute party
+ * Party information in a dispute.
+ *
+ * @see MP-03 for party identification requirements
  */
 export interface DisputeParty {
-  partyId: string; // Public key or identifier
+  /** Public key or unique identifier of the party */
+  partyId: string;
+
+  /** Role in this dispute */
   role: DisputePartyRole;
+
+  /** Optional human-readable name */
   name?: string;
+
+  /** Optional contact information for external resolution */
   contactInfo?: string;
 }
 
 /**
- * Contested item reference
+ * Reference to an item being contested in a dispute.
+ *
+ * Contested items are automatically frozen (marked UNDER_DISPUTE)
+ * when autoFreezeEvidence is enabled.
+ *
+ * @see MP-03 for evidence freezing rules
+ * @see NCIP-005 for Semantic Locking
  */
 export interface ContestedItem {
+  /** Type of the contested artifact */
   itemType: 'intent' | 'settlement' | 'receipt' | 'agreement' | 'delegation';
-  itemId: string; // Hash or ID of the contested item
-  itemHash?: string; // Hash of the item for verification
+
+  /** Hash or unique ID of the contested item */
+  itemId: string;
+
+  /** Optional hash for content verification */
+  itemHash?: string;
 }
 
 /**
- * Dispute evidence
+ * Evidence submitted in support of a dispute claim.
+ *
+ * Evidence is immutable once submitted and can be linked to
+ * other items for context.
+ *
+ * @see MP-03 for evidence submission rules
  */
 export interface DisputeEvidence {
+  /** Unique evidence identifier */
   evidenceId: string;
+
+  /** ID of the dispute this evidence supports */
   disputeId: string;
-  submittedBy: string; // Party ID
+
+  /** Party who submitted this evidence */
+  submittedBy: string;
+
+  /** Unix timestamp of submission */
   timestamp: number;
+
+  /** Type of evidence being submitted */
   evidenceType: 'document' | 'statement' | 'witness' | 'artifact' | 'other';
+
+  /** Natural language description of the evidence */
   description: string;
-  contentHash?: string; // Hash of evidence content
-  linkedItems?: string[]; // References to other items
+
+  /** SHA-256 hash of evidence content for integrity */
+  contentHash?: string;
+
+  /** References to related items */
+  linkedItems?: string[];
+
+  /** Additional metadata */
   metadata?: Record<string, any>;
 }
 
 /**
- * Dispute declaration
+ * Formal dispute declaration.
+ *
+ * A DisputeDeclaration initiates the MP-03 dispute resolution process.
+ * Once declared, contested items are frozen and parties enter the
+ * structured resolution workflow.
+ *
+ * @see MP-03 for dispute lifecycle
+ * @see NCIP-005 for Semantic Locking upon dispute
+ * @see NCIP-012 for human ratification requirements
  */
 export interface DisputeDeclaration {
+  /** Unique dispute identifier */
   disputeId: string;
+
+  /** Party initiating the dispute */
   claimant: DisputeParty;
-  respondent?: DisputeParty; // May not be known at declaration time
+
+  /** Party being challenged (may be unknown at declaration) */
+  respondent?: DisputeParty;
+
+  /** Items being contested in this dispute */
   contestedItems: ContestedItem[];
-  issueDescription: string; // Natural language description
-  desiredEscalationPath?: string; // e.g., "arbitration", "DAO", "court"
+
+  /** Natural language description of the dispute */
+  issueDescription: string;
+
+  /** Preferred escalation path (e.g., "arbitration", "DAO", "court") */
+  desiredEscalationPath?: string;
+
+  /** Current dispute status */
   status: DisputeStatus;
+
+  /** Unix timestamp when dispute was initiated */
   initiatedAt: number;
+
+  /** Unix timestamp of last status update */
   updatedAt: number;
+
+  /** Evidence submitted by both parties */
   evidence: DisputeEvidence[];
+
+  /** Optional AI-assisted clarification record */
   clarificationRecord?: ClarificationRecord;
+
+  /** Escalation declaration if dispute was escalated */
   escalation?: EscalationDeclaration;
+
+  /** Resolution if dispute has been resolved */
   resolution?: DisputeResolution;
 }
 
@@ -1020,121 +1832,267 @@ export interface DisputeConfig {
 
 // ============================================================================
 // MP-04: Licensing & Delegation Protocol Types
+//
+// MP-04 provides structured licensing and delegation of authority while
+// maintaining human sovereignty. Licenses grant usage rights over artifacts,
+// while delegations grant decision-making authority to agents or other humans.
+//
+// Key constraints:
+// - Ratification MUST be human-authored (NCIP-012)
+// - Maximum redelegation depth prevents authority dilution
+// - Violations are tracked and can trigger MP-03 disputes
+// - 24-hour cooling period for license delegation (NCIP-012)
+//
+// @see MP-04-spec.md for full protocol specification
+// @see NCIP-012 for Human Ratification UX requirements
 // ============================================================================
 
 /**
- * License status
+ * License status in the ratification pipeline.
+ *
+ * - `proposed`: License terms proposed, awaiting grantor ratification
+ * - `ratified`: Grantor has explicitly consented to terms
+ * - `active`: License is in effect
+ * - `expired`: Time-bounded license has expired
+ * - `revoked`: License explicitly revoked by grantor
+ *
+ * @see MP-04 for status transitions
+ * @see NCIP-012 for ratification requirements
  */
 export type LicenseStatus = 'proposed' | 'ratified' | 'active' | 'expired' | 'revoked';
 
 /**
- * Subject type for licensing
+ * Type of subject being licensed.
+ *
+ * @see MP-04 for licensing different artifact types
  */
 export type SubjectType = 'receipt' | 'artifact' | 'agreement' | 'settlement' | 'intent' | 'other';
 
 /**
- * License scope definition
+ * Scope definition for a license grant.
+ *
+ * Defines what can be done with the licensed subject, including
+ * purpose restrictions, prohibited actions, duration, and transferability.
+ *
+ * @see MP-04 for scope definition requirements
  */
 export interface LicenseScope {
+  /** Subject of the license (what is being licensed) */
   subject: {
+    /** Type of artifact being licensed */
     type: SubjectType;
-    ids: string[]; // Receipt IDs, artifact IDs, agreement IDs, etc.
+    /** IDs of specific items (receipts, artifacts, agreements, etc.) */
+    ids: string[];
   };
-  purpose: string; // Allowed use cases (natural language)
-  limits: string[]; // Prohibited actions
+
+  /** Allowed use cases in natural language */
+  purpose: string;
+
+  /** Prohibited actions in natural language */
+  limits: string[];
+
+  /** Duration constraints */
   duration: {
+    /** Whether license is perpetual or time-limited */
     type: 'perpetual' | 'time_bounded';
-    expiresAt?: number; // Timestamp for time_bounded
+    /** Expiration timestamp for time_bounded licenses */
+    expiresAt?: number;
   };
+
+  /** Transfer and sublicense permissions */
   transferability: {
+    /** Whether grantee can sublicense to others */
     sublicenseAllowed: boolean;
+    /** Whether grantee can redelegate rights */
     redelegationAllowed: boolean;
   };
 }
 
 /**
- * License grant
+ * License grant conferring usage rights.
+ *
+ * A License grants specific rights over artifacts (receipts, agreements, etc.)
+ * from a grantor to a grantee. Licenses require human ratification per NCIP-012.
+ *
+ * @see MP-04 for license lifecycle
+ * @see NCIP-012 for ratification requirements (24h cooling period)
  */
 export interface License {
+  /** Unique license identifier */
   licenseId: string;
-  grantorId: string; // Human or institution issuing license
-  granteeId: string; // Recipient of license
+
+  /** Human or institution issuing the license */
+  grantorId: string;
+
+  /** Recipient of the license rights */
+  granteeId: string;
+
+  /** Scope of rights granted */
   scope: LicenseScope;
+
+  /** Current license status */
   status: LicenseStatus;
 
-  // Lifecycle
+  // Lifecycle timestamps
+  /** Unix timestamp when license was proposed */
   proposedAt: number;
-  proposedBy: string; // May differ from grantor (counterparty/mediator can propose)
+
+  /** Who proposed the license (may differ from grantor) */
+  proposedBy: string;
+
+  /** Unix timestamp of human ratification */
   ratifiedAt?: number;
-  ratificationStatement?: string; // Natural language ratification by grantor
+
+  /** Natural language ratification statement by grantor */
+  ratificationStatement?: string;
+
+  /** Unix timestamp when license became active */
   activatedAt?: number;
 
   // Revocation
+  /** Unix timestamp of revocation */
   revokedAt?: number;
+
+  /** Natural language revocation statement */
   revocationStatement?: string;
+
+  /** Cryptographic signature on revocation */
   revocationSignature?: string;
 
   // Immutable references
-  underlyingReferences: string[]; // Hashes of receipts, agreements, etc.
-  licenseHash: string; // SHA-256 of license contents
+  /** Hashes of underlying artifacts (receipts, agreements, etc.) */
+  underlyingReferences: string[];
+
+  /** SHA-256 hash of license contents */
+  licenseHash: string;
 
   // Metadata
-  humanAuthorship: boolean; // Must be true for ratification
+  /** Must be true for valid ratification per NCIP-012 */
+  humanAuthorship: boolean;
+
+  /** Cryptographic signature on license */
   signature?: string;
 }
 
 /**
- * Delegation status
+ * Delegation status in the ratification pipeline.
+ *
+ * - `proposed`: Delegation terms proposed, awaiting delegator ratification
+ * - `ratified`: Delegator has explicitly consented
+ * - `active`: Delegation is in effect
+ * - `expired`: Time-bounded delegation has expired
+ * - `revoked`: Delegation explicitly revoked
+ *
+ * @see MP-04 for delegation lifecycle
  */
 export type DelegationStatus = 'proposed' | 'ratified' | 'active' | 'expired' | 'revoked';
 
 /**
- * Delegation scope definition
+ * Scope definition for a delegation grant.
+ *
+ * Defines what powers are delegated, their constraints, revocation conditions,
+ * duration, and whether the delegate can redelegate to others.
+ *
+ * @see MP-04 for delegation scope requirements
  */
 export interface DelegationScope {
-  delegatedPowers: string[]; // Specific powers granted (natural language)
-  constraints: string[]; // Limitations on delegated powers
-  revocationConditions: string[]; // Conditions triggering auto-revocation
+  /** Specific powers granted in natural language */
+  delegatedPowers: string[];
+
+  /** Limitations on delegated powers */
+  constraints: string[];
+
+  /** Conditions that trigger automatic revocation */
+  revocationConditions: string[];
+
+  /** Duration constraints */
   duration: {
+    /** Whether delegation is perpetual or time-limited */
     type: 'perpetual' | 'time_bounded';
+    /** Expiration timestamp for time_bounded delegations */
     expiresAt?: number;
   };
+
+  /** Redelegation permissions */
   transferability: {
+    /** Whether delegate can redelegate to others */
     redelegationAllowed: boolean;
-    maxRedelegationDepth?: number; // Maximum chain depth
+    /** Maximum redelegation chain depth (default: 3) */
+    maxRedelegationDepth?: number;
   };
 }
 
 /**
- * Delegation grant (MP-04)
+ * Delegation grant conferring decision-making authority.
+ *
+ * A DelegationGrant allows a human to delegate specific powers to an agent
+ * or another human. Delegations require human ratification per NCIP-012
+ * and are tracked for scope violations.
+ *
+ * Redelegation chains are tracked via parentDelegationId and redelegationDepth
+ * to prevent authority dilution beyond configured limits.
+ *
+ * @see MP-04 for delegation lifecycle and scope tracking
+ * @see NCIP-012 for ratification requirements (24h cooling period)
  */
 export interface DelegationGrant {
+  /** Unique delegation identifier */
   delegationId: string;
-  delegatorId: string; // Human delegating authority
-  delegateId: string; // Agent or human receiving authority
+
+  /** Human delegating authority */
+  delegatorId: string;
+
+  /** Agent or human receiving authority */
+  delegateId: string;
+
+  /** Scope of powers delegated */
   scope: DelegationScope;
+
+  /** Current delegation status */
   status: DelegationStatus;
 
-  // Lifecycle
+  // Lifecycle timestamps
+  /** Unix timestamp when delegation was proposed */
   proposedAt: number;
+
+  /** Who proposed the delegation */
   proposedBy: string;
+
+  /** Unix timestamp of human ratification */
   ratifiedAt?: number;
-  ratificationStatement?: string; // Natural language ratification
+
+  /** Natural language ratification statement */
+  ratificationStatement?: string;
+
+  /** Unix timestamp when delegation became active */
   activatedAt?: number;
 
   // Revocation
+  /** Unix timestamp of revocation */
   revokedAt?: number;
+
+  /** Natural language revocation statement */
   revocationStatement?: string;
+
+  /** Cryptographic signature on revocation */
   revocationSignature?: string;
 
-  // Redelegation chain
-  parentDelegationId?: string; // If this is a redelegation
-  redelegationDepth: number; // 0 = original delegation
+  // Redelegation chain tracking
+  /** Parent delegation ID if this is a redelegation */
+  parentDelegationId?: string;
+
+  /** Depth in redelegation chain (0 = original delegation) */
+  redelegationDepth: number;
 
   // Metadata
-  humanAuthorship: boolean; // Must be true for ratification
+  /** Must be true for valid ratification per NCIP-012 */
+  humanAuthorship: boolean;
+
+  /** Cryptographic signature on delegation */
   signature?: string;
-  delegationHash: string; // SHA-256 of delegation contents
+
+  /** SHA-256 hash of delegation contents */
+  delegationHash: string;
 }
 
 /**
@@ -1180,10 +2138,34 @@ export interface DelegatedAction {
 
 // ============================================================================
 // MP-05: Settlement & Capitalization Interface Types
+//
+// MP-05 bridges NatLangChain agreements to real-world value through structured
+// settlement and capitalization. It provides:
+// - Mutual declaration of settlement by all parties
+// - Staged/milestone settlements for complex agreements
+// - Capitalization events transforming settlements into value instruments
+// - Integration with external financial and legal systems
+//
+// Key constraints:
+// - Settlement requires human ratification per NCIP-012 (24h cooling period)
+// - Must reference MP-01 agreements, MP-02 receipts, and/or MP-04 licenses
+// - Disputes trigger MP-03 escalation automatically
+//
+// @see MP-05-spec.md for full protocol specification
+// @see NCIP-012 for Human Ratification UX requirements
 // ============================================================================
 
 /**
- * MP-05 Settlement status
+ * MP-05 Settlement status in the declaration pipeline.
+ *
+ * - `declared`: Initial declaration by one or more parties
+ * - `ratified`: All required parties have declared (per NCIP-012)
+ * - `finalized`: Settlement is complete and immutable
+ * - `contested`: Under dispute via MP-03
+ * - `reversed`: Reversed by new declaration (requires all parties)
+ *
+ * @see MP-05 for settlement lifecycle
+ * @see NCIP-012 for ratification requirements
  */
 export type MP05SettlementStatus =
   | 'declared'      // Initial declaration by one or more parties
@@ -1193,7 +2175,17 @@ export type MP05SettlementStatus =
   | 'reversed';     // Reversed by new declaration
 
 /**
- * Value type for capitalization
+ * Value type for capitalization events.
+ *
+ * Defines how settlement value is transformed into real-world instruments:
+ * - `payment_claim`: Direct payment or compensation
+ * - `revenue_share`: Ongoing revenue sharing arrangement
+ * - `equity_interest`: Ownership stake
+ * - `token`: Tokenized representation
+ * - `contractual_right`: Legal rights or obligations
+ * - `other`: Custom value type
+ *
+ * @see MP-05 for capitalization requirements
  */
 export type ValueType =
   | 'payment_claim'
