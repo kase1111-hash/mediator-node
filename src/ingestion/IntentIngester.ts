@@ -1,8 +1,8 @@
-import axios from 'axios';
 import { Intent, IntentStatus, MediatorConfig } from '../types';
 import { logger } from '../utils/logger';
 import { generateIntentHash } from '../utils/crypto';
 import { BurnManager } from '../burn/BurnManager';
+import { ChainClient } from '../chain';
 
 /**
  * IntentIngester monitors the NatLangChain for new intents
@@ -14,10 +14,12 @@ export class IntentIngester {
   private lastPollTime: number = 0;
   private pollingInterval: NodeJS.Timeout | null = null;
   private burnManager: BurnManager | null = null;
+  private chainClient: ChainClient;
 
-  constructor(config: MediatorConfig, burnManager?: BurnManager) {
+  constructor(config: MediatorConfig, burnManager?: BurnManager, chainClient?: ChainClient) {
     this.config = config;
     this.burnManager = burnManager || null;
+    this.chainClient = chainClient || ChainClient.fromConfig(config);
   }
 
   /**
@@ -47,20 +49,18 @@ export class IntentIngester {
 
   /**
    * Poll the chain for new intents
+   * Uses ChainClient to fetch from NatLangChain API
    */
   private async pollForIntents(): Promise<void> {
     try {
       logger.debug('Polling for new intents', { endpoint: this.config.chainEndpoint });
 
-      const response = await axios.get(`${this.config.chainEndpoint}/api/v1/intents`, {
-        params: {
-          status: 'pending',
-          since: this.lastPollTime,
-          limit: 100,
-        },
+      // Use ChainClient to get pending intents
+      const intents = await this.chainClient.getPendingIntents({
+        status: 'pending',
+        since: this.lastPollTime,
+        limit: 100,
       });
-
-      const intents: Intent[] = response.data.intents || [];
 
       for (const intent of intents) {
         await this.processIntent(intent);
@@ -302,6 +302,7 @@ export class IntentIngester {
   /**
    * Submit an intent to the chain with burn validation
    * This method executes the required burn before submitting the intent
+   * Uses ChainClient to submit to NatLangChain API
    *
    * @param intentData - Intent data to submit
    * @returns The submitted intent with hash, or null if submission failed
@@ -366,16 +367,10 @@ export class IntentIngester {
         flagCount: 0,
       };
 
-      // Submit to chain
-      const response = await axios.post(
-        `${this.config.chainEndpoint}/api/v1/intents`,
-        {
-          intent,
-          burnTransaction: burnResult,
-        }
-      );
+      // Submit to chain using ChainClient
+      const result = await this.chainClient.submitIntent(intent, burnResult || undefined);
 
-      if (response.status === 200 || response.status === 201) {
+      if (result.success) {
         logger.info('Intent submitted successfully', {
           hash: intentHash,
           author: intentData.author,
@@ -389,7 +384,7 @@ export class IntentIngester {
       }
 
       logger.error('Intent submission failed', {
-        status: response.status,
+        error: result.error,
         hash: intentHash,
       });
       return null;
@@ -401,5 +396,12 @@ export class IntentIngester {
       });
       throw error;
     }
+  }
+
+  /**
+   * Get the ChainClient instance
+   */
+  public getChainClient(): ChainClient {
+    return this.chainClient;
   }
 }

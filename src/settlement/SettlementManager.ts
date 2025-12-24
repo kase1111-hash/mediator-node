@@ -1,34 +1,37 @@
 import { nanoid } from 'nanoid';
-import axios from 'axios';
 import {
   ProposedSettlement,
   NegotiationResult,
   MediatorConfig,
   Intent,
-  SettlementStatus,
 } from '../types';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';
 import { BurnManager } from '../burn/BurnManager';
 import { SemanticConsensusManager } from '../consensus/SemanticConsensusManager';
+import { ChainClient } from '../chain';
 
 /**
  * SettlementManager handles the creation and submission of proposed settlements
+ * Uses ChainClient for NatLangChain API compatibility
  */
 export class SettlementManager {
   private config: MediatorConfig;
   private activeSettlements: Map<string, ProposedSettlement> = new Map();
   private burnManager: BurnManager | null = null;
   private semanticConsensusManager: SemanticConsensusManager | null = null;
+  private chainClient: ChainClient;
 
   constructor(
     config: MediatorConfig,
     burnManager?: BurnManager,
-    semanticConsensusManager?: SemanticConsensusManager
+    semanticConsensusManager?: SemanticConsensusManager,
+    chainClient?: ChainClient
   ) {
     this.config = config;
     this.burnManager = burnManager || null;
     this.semanticConsensusManager = semanticConsensusManager || null;
+    this.chainClient = chainClient || ChainClient.fromConfig(config);
   }
 
   /**
@@ -104,26 +107,16 @@ export class SettlementManager {
 
   /**
    * Submit a settlement to the chain
+   * Uses ChainClient for NatLangChain API compatibility
    */
   public async submitSettlement(settlement: ProposedSettlement): Promise<boolean> {
     try {
       logger.info('Submitting settlement to chain', { id: settlement.id });
 
-      // Format as prose entry
-      const proseEntry = this.formatSettlementAsProse(settlement);
+      // Use ChainClient to submit settlement
+      const result = await this.chainClient.submitSettlement(settlement);
 
-      const response = await axios.post(
-        `${this.config.chainEndpoint}/api/v1/entries`,
-        {
-          type: 'settlement',
-          author: this.config.mediatorPublicKey,
-          content: proseEntry,
-          metadata: settlement,
-          signature: generateSignature(proseEntry, this.config.mediatorPrivateKey),
-        }
-      );
-
-      if (response.status === 200 || response.status === 201) {
+      if (result.success) {
         this.activeSettlements.set(settlement.id, settlement);
         logger.info('Settlement submitted successfully', { id: settlement.id });
 
@@ -153,6 +146,7 @@ export class SettlementManager {
         return true;
       }
 
+      logger.error('Settlement submission failed', { error: result.error });
       return false;
     } catch (error) {
       logger.error('Error submitting settlement', { error, settlementId: settlement.id });
@@ -161,34 +155,8 @@ export class SettlementManager {
   }
 
   /**
-   * Format settlement as prose for chain entry
-   */
-  private formatSettlementAsProse(settlement: ProposedSettlement): string {
-    const terms = settlement.proposedTerms;
-    const termsStr = JSON.stringify(terms, null, 2);
-
-    return `[PROPOSED SETTLEMENT]
-
-Settlement ID: ${settlement.id}
-Linking Intent #${settlement.intentHashA} (Party A) and #${settlement.intentHashB} (Party B)
-
-Reasoning: ${settlement.reasoningTrace}
-
-Proposed Terms:
-${termsStr}
-
-Facilitation Fee: ${settlement.facilitationFeePercent}% (${settlement.facilitationFee} NLC) to Mediator ${settlement.mediatorId}
-
-Model Integrity Hash: ${settlement.modelIntegrityHash}
-${settlement.stakeReference ? `Stake Reference: ${settlement.stakeReference}` : ''}
-${settlement.authoritySignature ? `Authority Signature: ${settlement.authoritySignature}` : ''}
-
-Acceptance Deadline: ${new Date(settlement.acceptanceDeadline).toISOString()}
-`;
-  }
-
-  /**
    * Monitor settlement status
+   * Uses ChainClient for NatLangChain API compatibility
    */
   public async monitorSettlements(): Promise<void> {
     const now = Date.now();
@@ -207,22 +175,22 @@ Acceptance Deadline: ${new Date(settlement.acceptanceDeadline).toISOString()}
           continue;
         }
 
-        // Check chain for acceptance entries
-        const response = await axios.get(
-          `${this.config.chainEndpoint}/api/v1/settlements/${id}/status`
-        );
+        // Use ChainClient to check settlement status
+        const status = await this.chainClient.getSettlementStatus(id);
 
-        if (response.data.partyAAccepted) {
-          settlement.partyAAccepted = true;
-        }
+        if (status) {
+          if (status.partyAAccepted) {
+            settlement.partyAAccepted = true;
+          }
 
-        if (response.data.partyBAccepted) {
-          settlement.partyBAccepted = true;
-        }
+          if (status.partyBAccepted) {
+            settlement.partyBAccepted = true;
+          }
 
-        if (response.data.challenges && response.data.challenges.length > 0) {
-          settlement.challenges = response.data.challenges;
-          logger.warn('Settlement challenged', { id, challenges: settlement.challenges?.length || 0 });
+          if (status.challenges && status.challenges.length > 0) {
+            settlement.challenges = status.challenges;
+            logger.warn('Settlement challenged', { id, challenges: settlement.challenges?.length || 0 });
+          }
         }
 
         // Check if both accepted
@@ -238,6 +206,7 @@ Acceptance Deadline: ${new Date(settlement.acceptanceDeadline).toISOString()}
 
   /**
    * Close a settlement and claim fee
+   * Uses ChainClient for NatLangChain API compatibility
    */
   private async closeSettlement(settlement: ProposedSettlement): Promise<void> {
     try {
@@ -324,28 +293,24 @@ Acceptance Deadline: ${new Date(settlement.acceptanceDeadline).toISOString()}
         }
       }
 
-      // Create payout entry
-      const payoutEntry = {
-        type: 'payout',
-        settlementId: settlement.id,
-        mediatorId: this.config.mediatorPublicKey,
-        amount: settlement.facilitationFee,
-        timestamp: Date.now(),
-      };
+      // Use ChainClient to submit payout
+      const payoutResult = await this.chainClient.submitPayout(
+        settlement.id,
+        settlement.facilitationFee
+      );
 
-      await axios.post(`${this.config.chainEndpoint}/api/v1/entries`, {
-        type: 'payout',
-        author: this.config.mediatorPublicKey,
-        content: `[PAYOUT] Settlement ${settlement.id} closed. Claiming fee: ${settlement.facilitationFee} NLC`,
-        metadata: payoutEntry,
-        signature: generateSignature(JSON.stringify(payoutEntry), this.config.mediatorPrivateKey),
-      });
-
-      settlement.status = 'closed';
-      logger.info('Settlement closed and fee claimed', {
-        id: settlement.id,
-        fee: settlement.facilitationFee,
-      });
+      if (payoutResult.success) {
+        settlement.status = 'closed';
+        logger.info('Settlement closed and fee claimed', {
+          id: settlement.id,
+          fee: settlement.facilitationFee,
+        });
+      } else {
+        logger.error('Failed to submit payout', {
+          settlementId: settlement.id,
+          error: payoutResult.error,
+        });
+      }
     } catch (error) {
       logger.error('Error closing settlement', { error, settlementId: settlement.id });
     }
@@ -373,5 +338,12 @@ Acceptance Deadline: ${new Date(settlement.acceptanceDeadline).toISOString()}
    */
   public getActiveSettlements(): ProposedSettlement[] {
     return Array.from(this.activeSettlements.values());
+  }
+
+  /**
+   * Get the ChainClient instance
+   */
+  public getChainClient(): ChainClient {
+    return this.chainClient;
   }
 }
