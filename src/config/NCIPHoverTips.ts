@@ -46,6 +46,132 @@ export const defaultNCIPHoverTipsConfig: NCIPHoverTipsConfig = {
   hoverDelayMs: 300,
 };
 
+// ============================================================================
+// GUI Security & Payment Notices
+// ============================================================================
+
+export interface GUINotice {
+  /** Unique identifier for the notice */
+  id: string;
+  /** Notice type for styling */
+  type: 'info' | 'warning' | 'security' | 'tip';
+  /** Short title */
+  title: string;
+  /** Full message */
+  message: string;
+  /** Whether notice can be dismissed */
+  dismissible: boolean;
+  /** Icon suggestion (optional) */
+  icon?: string;
+}
+
+/**
+ * Pre-configured GUI notices for security and payment clarity
+ */
+export const guiNotices: Record<string, GUINotice> = {
+  payment_security: {
+    id: 'payment_security',
+    type: 'security',
+    title: 'How Payments Work',
+    message: 'This mediator matches intents and proposes settlements—it does NOT hold funds or process payments. Actual token transfers happen on the NatLangChain. Your private keys never leave your device.',
+    dismissible: true,
+    icon: 'shield-check',
+  },
+
+  no_wallet_storage: {
+    id: 'no_wallet_storage',
+    type: 'info',
+    title: 'No Wallet Required Here',
+    message: 'You are identified by your public key, not a wallet address. Sign transactions locally with your private key. The chain handles all token transfers.',
+    dismissible: true,
+    icon: 'key',
+  },
+
+  dual_acceptance: {
+    id: 'dual_acceptance',
+    type: 'tip',
+    title: 'Both Parties Must Accept',
+    message: 'No settlement can close without signatures from both parties. You have 72 hours to review and challenge before any payout occurs.',
+    dismissible: true,
+    icon: 'users',
+  },
+
+  challenge_window: {
+    id: 'challenge_window',
+    type: 'warning',
+    title: '72-Hour Challenge Period',
+    message: 'After acceptance, there is a 72-hour window to dispute the settlement. Mediator fees are forfeited if a challenge is upheld.',
+    dismissible: true,
+    icon: 'clock',
+  },
+
+  mediator_stake: {
+    id: 'mediator_stake',
+    type: 'security',
+    title: 'Mediator Has Stake at Risk',
+    message: 'Mediators post reputation bonds that get slashed for misconduct. Bad behavior = lost funds. This aligns their incentives with yours.',
+    dismissible: true,
+    icon: 'shield',
+  },
+
+  signature_only: {
+    id: 'signature_only',
+    type: 'info',
+    title: 'Sign, Never Share',
+    message: 'You only sign data with your private key—you never send the key itself. RSA-SHA256 signatures prove your identity cryptographically.',
+    dismissible: true,
+    icon: 'lock',
+  },
+};
+
+/**
+ * Get a specific GUI notice by ID
+ */
+export function getGUINotice(noticeId: string): GUINotice | undefined {
+  return guiNotices[noticeId];
+}
+
+/**
+ * Get all GUI notices of a specific type
+ */
+export function getGUINoticesByType(type: GUINotice['type']): GUINotice[] {
+  return Object.values(guiNotices).filter(notice => notice.type === type);
+}
+
+/**
+ * Get the primary payment security notice (most important for new users)
+ */
+export function getPaymentSecurityNotice(): GUINotice {
+  return guiNotices.payment_security;
+}
+
+/**
+ * Get all security-related notices for display
+ */
+export function getAllSecurityNotices(): GUINotice[] {
+  return [
+    guiNotices.payment_security,
+    guiNotices.no_wallet_storage,
+    guiNotices.signature_only,
+    guiNotices.mediator_stake,
+  ];
+}
+
+/**
+ * Get notices recommended for first-time users
+ */
+export function getOnboardingNotices(): GUINotice[] {
+  return [
+    guiNotices.payment_security,
+    guiNotices.dual_acceptance,
+    guiNotices.challenge_window,
+  ];
+}
+
+// ============================================================================
+// NCIP Hover Tips Registry
+// ============================================================================
+
 /**
  * Comprehensive hover tips for all NCIP fields and concepts
  */
