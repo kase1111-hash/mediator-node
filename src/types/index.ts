@@ -400,6 +400,13 @@ export interface MediatorConfig {
   governanceProposalMinStake?: number; // Minimum stake to submit proposals (default: 1000)
   governanceMonitoringInterval?: number; // Proposal monitoring interval in ms (default: 3600000 - 1 hour)
 
+  // NCIP Hover Tips configuration
+  enableNCIPHoverTips?: boolean; // Enable NCIP hover tips (default: true)
+  ncipHoverTipsShortOnly?: boolean; // Show short descriptions only (default: false)
+  ncipHoverTipsShowReferences?: boolean; // Show NCIP document references (default: true)
+  ncipHoverTipsShowRelated?: boolean; // Show related concepts (default: true)
+  ncipHoverTipsDelayMs?: number; // Delay before showing tooltip in ms (default: 300)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 
