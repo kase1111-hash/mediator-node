@@ -110,6 +110,13 @@ export class ConfigLoader {
       maxClarificationDays: this.getOptionalNumber('MAX_CLARIFICATION_DAYS'),
       requireHumanEscalation: this.getOptional('REQUIRE_HUMAN_ESCALATION') !== 'false', // Default true
 
+      // NCIP Hover Tips configuration
+      enableNCIPHoverTips: this.getOptional('ENABLE_NCIP_HOVER_TIPS', 'true') === 'true',
+      ncipHoverTipsShortOnly: this.getOptional('NCIP_HOVER_TIPS_SHORT_ONLY') === 'true',
+      ncipHoverTipsShowReferences: this.getOptional('NCIP_HOVER_TIPS_SHOW_REFERENCES', 'true') === 'true',
+      ncipHoverTipsShowRelated: this.getOptional('NCIP_HOVER_TIPS_SHOW_RELATED', 'true') === 'true',
+      ncipHoverTipsDelayMs: this.getOptionalNumber('NCIP_HOVER_TIPS_DELAY_MS'),
+
       // Logging
       logLevel: this.getLogLevel(),
     };
