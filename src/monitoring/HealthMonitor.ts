@@ -55,13 +55,24 @@ export class HealthMonitor {
     const interval = this.config.monitoringHealthCheckInterval || 30000;
 
     this.monitoringInterval = setInterval(async () => {
-      await this.performHealthCheck();
+      try {
+        await this.performHealthCheck();
+      } catch (error) {
+        logger.error('Error in health monitoring interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, interval);
 
     logger.info('Health monitoring started', { interval });
 
-    // Perform initial health check
-    this.performHealthCheck();
+    // Perform initial health check with error handling
+    this.performHealthCheck().catch(error => {
+      logger.error('Error in initial health check', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    });
   }
 
   /**

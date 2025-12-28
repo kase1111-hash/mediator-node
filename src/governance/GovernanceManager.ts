@@ -53,7 +53,14 @@ export class GovernanceManager {
     const interval = this.config.governanceMonitoringInterval || 3600000; // 1 hour
 
     this.monitoringInterval = setInterval(async () => {
-      await this.monitorProposals();
+      try {
+        await this.monitorProposals();
+      } catch (error) {
+        logger.error('Error in governance monitoring interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, interval);
 
     logger.info('Governance manager started', {
@@ -62,8 +69,12 @@ export class GovernanceManager {
       approvalThreshold: this.governanceConfig.approvalThreshold,
     });
 
-    // Initial monitoring
-    this.monitorProposals();
+    // Initial monitoring with error handling
+    this.monitorProposals().catch(error => {
+      logger.error('Error in initial governance monitoring', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    });
   }
 
   /**

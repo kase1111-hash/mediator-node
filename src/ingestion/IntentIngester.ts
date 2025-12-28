@@ -29,11 +29,22 @@ export class IntentIngester {
     logger.info('Starting intent ingestion polling', { intervalMs });
 
     this.pollingInterval = setInterval(async () => {
-      await this.pollForIntents();
+      try {
+        await this.pollForIntents();
+      } catch (error) {
+        logger.error('Unhandled error in intent polling interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, intervalMs);
 
-    // Initial poll
-    this.pollForIntents();
+    // Initial poll with error handling
+    this.pollForIntents().catch(error => {
+      logger.error('Error in initial intent poll', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    });
   }
 
   /**

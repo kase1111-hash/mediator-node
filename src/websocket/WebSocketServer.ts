@@ -172,19 +172,32 @@ export class WebSocketServer {
       ? connectionIds
       : Array.from(this.connections.keys());
 
+    // Pre-serialize the message once for efficiency and to catch serialization errors early
+    let serializedMessage: string;
+    try {
+      serializedMessage = JSON.stringify(message);
+    } catch (serializeErr: any) {
+      logger.error('Failed to serialize WebSocket message', {
+        eventType: message.type,
+        error: serializeErr.message || 'JSON stringify failed',
+      });
+      return;
+    }
+
     for (const connId of targets) {
       const ws = this.clients.get(connId);
       if (ws && ws.readyState === WebSocket.OPEN) {
         try {
-          ws.send(JSON.stringify(message));
+          ws.send(serializedMessage);
           logger.debug('Message sent to connection', {
             connectionId: connId,
             eventType: message.type,
           });
         } catch (err: any) {
-          logger.error('Failed to send message', {
+          logger.error('Failed to send message to connection', {
             connectionId: connId,
-            error: err.message,
+            eventType: message.type,
+            error: err.message || 'Unknown send error',
           });
         }
       }
@@ -396,7 +409,14 @@ export class WebSocketServer {
         },
       };
 
-      ws.send(JSON.stringify(ackMessage));
+      try {
+        ws.send(JSON.stringify(ackMessage));
+      } catch (err: any) {
+        logger.error('Failed to send connection acknowledgment', {
+          connectionId,
+          error: err.message || 'Unknown error',
+        });
+      }
     });
 
     this.wss.on('error', (error: Error) => {
