@@ -48,23 +48,50 @@ export class BurnManager {
     const submissionsFile = path.join(this.dataPath, 'submissions.json');
     const historyFile = path.join(this.dataPath, 'history.json');
 
-    try {
-      if (fs.existsSync(submissionsFile)) {
-        const data = JSON.parse(fs.readFileSync(submissionsFile, 'utf-8'));
+    // Load user submissions
+    if (fs.existsSync(submissionsFile)) {
+      try {
+        const fileContent = fs.readFileSync(submissionsFile, 'utf-8');
+        const data = JSON.parse(fileContent);
+
+        if (typeof data !== 'object' || data === null) {
+          throw new Error('Submissions data is not a valid object');
+        }
+
         this.userSubmissions = new Map(Object.entries(data));
         logger.info('Loaded user submission data', {
           users: this.userSubmissions.size,
         });
+      } catch (error) {
+        logger.error('Failed to parse submissions file, starting with empty data', {
+          path: submissionsFile,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        this.userSubmissions = new Map();
       }
+    }
 
-      if (fs.existsSync(historyFile)) {
-        this.burnHistory = JSON.parse(fs.readFileSync(historyFile, 'utf-8'));
+    // Load burn history
+    if (fs.existsSync(historyFile)) {
+      try {
+        const fileContent = fs.readFileSync(historyFile, 'utf-8');
+        const data = JSON.parse(fileContent);
+
+        if (!Array.isArray(data)) {
+          throw new Error('Burn history data is not a valid array');
+        }
+
+        this.burnHistory = data;
         logger.info('Loaded burn history', {
           transactions: this.burnHistory.length,
         });
+      } catch (error) {
+        logger.error('Failed to parse burn history file, starting with empty history', {
+          path: historyFile,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        this.burnHistory = [];
       }
-    } catch (error) {
-      logger.warn('Could not load burn data from disk', { error });
     }
   }
 
@@ -75,18 +102,45 @@ export class BurnManager {
     const submissionsFile = path.join(this.dataPath, 'submissions.json');
     const historyFile = path.join(this.dataPath, 'history.json');
 
+    // Ensure data directory exists before writing
+    try {
+      if (!fs.existsSync(this.dataPath)) {
+        fs.mkdirSync(this.dataPath, { recursive: true });
+      }
+    } catch (dirError) {
+      logger.error('Failed to create burn data directory', {
+        path: this.dataPath,
+        error: dirError instanceof Error ? dirError.message : 'Unknown error',
+      });
+      return;
+    }
+
+    // Write submissions data
     try {
       const submissionsData = Object.fromEntries(this.userSubmissions.entries());
-      fs.writeFileSync(submissionsFile, JSON.stringify(submissionsData, null, 2));
+      const submissionsJson = JSON.stringify(submissionsData, null, 2);
+      fs.writeFileSync(submissionsFile, submissionsJson);
+    } catch (error) {
+      logger.error('Error persisting submissions data', {
+        path: submissionsFile,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
 
+    // Write burn history
+    try {
       // Keep only last 10000 burn transactions in history
       const recentHistory = this.burnHistory.slice(-10000);
-      fs.writeFileSync(historyFile, JSON.stringify(recentHistory, null, 2));
-
-      logger.debug('Persisted burn data to disk');
+      const historyJson = JSON.stringify(recentHistory, null, 2);
+      fs.writeFileSync(historyFile, historyJson);
     } catch (error) {
-      logger.error('Error persisting burn data', { error });
+      logger.error('Error persisting burn history', {
+        path: historyFile,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
     }
+
+    logger.debug('Persisted burn data to disk');
   }
 
   /**

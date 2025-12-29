@@ -35,9 +35,24 @@ export class VectorDatabase {
         // Load intent map
         const mapPath = path.join(this.config.vectorDbPath, 'intent-map.json');
         if (fs.existsSync(mapPath)) {
-          const mapData = JSON.parse(fs.readFileSync(mapPath, 'utf-8'));
-          this.intentMap = new Map(Object.entries(mapData).map(([k, v]) => [parseInt(k), v as Intent]));
-          this.nextId = Math.max(...Array.from(this.intentMap.keys()), 0) + 1;
+          try {
+            const fileContent = fs.readFileSync(mapPath, 'utf-8');
+            const mapData = JSON.parse(fileContent);
+
+            if (typeof mapData !== 'object' || mapData === null) {
+              throw new Error('Intent map data is not a valid object');
+            }
+
+            this.intentMap = new Map(Object.entries(mapData).map(([k, v]) => [parseInt(k), v as Intent]));
+            this.nextId = Math.max(...Array.from(this.intentMap.keys()), 0) + 1;
+          } catch (parseError) {
+            logger.error('Failed to parse intent map file, starting with empty map', {
+              path: mapPath,
+              error: parseError instanceof Error ? parseError.message : 'Unknown parse error',
+            });
+            this.intentMap = new Map();
+            this.nextId = 0;
+          }
         }
       } else {
         // Create new index

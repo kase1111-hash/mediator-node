@@ -21,7 +21,8 @@ export class AuthorityManager {
   public async loadAuthoritySet(): Promise<void> {
     try {
       const response = await axios.get(
-        `${this.config.chainEndpoint}/api/v1/consensus/authorities`
+        `${this.config.chainEndpoint}/api/v1/consensus/authorities`,
+        { timeout: 10000 }
       );
 
       if (response.data && response.data.authorities) {
@@ -35,8 +36,36 @@ export class AuthorityManager {
           isAuthorized: this.isAuthorized,
         });
       }
-    } catch (error) {
-      logger.warn('Could not load authority set from chain', { error });
+    } catch (error: any) {
+      // Provide detailed error context based on error type
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNREFUSED') {
+          logger.warn('Could not connect to chain endpoint for authority set', {
+            endpoint: this.config.chainEndpoint,
+            error: 'Connection refused',
+          });
+        } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+          logger.warn('Timeout loading authority set from chain', {
+            endpoint: this.config.chainEndpoint,
+            timeout: '10000ms',
+          });
+        } else if (error.response) {
+          logger.warn('Chain returned error loading authority set', {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            endpoint: this.config.chainEndpoint,
+          });
+        } else {
+          logger.warn('Network error loading authority set', {
+            message: error.message,
+            code: error.code,
+          });
+        }
+      } else {
+        logger.warn('Unexpected error loading authority set', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
     }
   }
 
@@ -88,7 +117,8 @@ export class AuthorityManager {
             publicKey: this.config.mediatorPublicKey,
           },
           timestamp: Date.now(),
-        }
+        },
+        { timeout: 15000 }
       );
 
       if (response.status === 200 || response.status === 201) {
@@ -96,9 +126,41 @@ export class AuthorityManager {
         return true;
       }
 
+      logger.warn('Authorization request returned unexpected status', {
+        status: response.status,
+        statusText: response.statusText,
+      });
       return false;
-    } catch (error) {
-      logger.error('Error requesting authorization', { error });
+    } catch (error: any) {
+      // Provide detailed error context based on error type
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ECONNREFUSED') {
+          logger.error('Could not connect to chain endpoint for authorization request', {
+            endpoint: this.config.chainEndpoint,
+            error: 'Connection refused',
+          });
+        } else if (error.code === 'ETIMEDOUT' || error.code === 'ECONNABORTED') {
+          logger.error('Timeout submitting authorization request', {
+            endpoint: this.config.chainEndpoint,
+            timeout: '15000ms',
+          });
+        } else if (error.response) {
+          logger.error('Chain returned error for authorization request', {
+            status: error.response.status,
+            statusText: error.response.statusText,
+            data: error.response.data,
+          });
+        } else {
+          logger.error('Network error submitting authorization request', {
+            message: error.message,
+            code: error.code,
+          });
+        }
+      } else {
+        logger.error('Unexpected error requesting authorization', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
       return false;
     }
   }

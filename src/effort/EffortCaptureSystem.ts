@@ -70,14 +70,28 @@ export class EffortCaptureSystem {
     this.observerManager.startAll();
 
     // Start periodic segmentation (every 5 minutes)
-    this.segmentationIntervalId = setInterval(() => {
-      this.processSegments();
+    this.segmentationIntervalId = setInterval(async () => {
+      try {
+        await this.processSegments();
+      } catch (error) {
+        logger.error('Error in segmentation processing interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, 5 * 60 * 1000);
 
     // Start auto-anchoring if enabled (every 10 minutes)
     if (this.config.effortAutoAnchor !== false) {
-      this.anchoringIntervalId = setInterval(() => {
-        this.anchoringService.autoAnchorValidatedReceipts();
+      this.anchoringIntervalId = setInterval(async () => {
+        try {
+          await this.anchoringService.autoAnchorValidatedReceipts();
+        } catch (error) {
+          logger.error('Error in auto-anchoring interval', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+        }
       }, 10 * 60 * 1000);
     }
 

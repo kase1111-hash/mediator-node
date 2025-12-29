@@ -393,7 +393,14 @@ export class MediatorNode {
     this.cycleInterval = setInterval(async () => {
       if (!this.isRunning) return;
 
-      await this.executeAlignmentCycle();
+      try {
+        await this.executeAlignmentCycle();
+      } catch (error) {
+        logger.error('Unhandled error in alignment cycle interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, 30000);
 
     // Run initial cycle
@@ -523,7 +530,14 @@ export class MediatorNode {
     setInterval(async () => {
       if (!this.isRunning) return;
 
-      await this.settlementManager.monitorSettlements();
+      try {
+        await this.settlementManager.monitorSettlements();
+      } catch (error) {
+        logger.error('Error in settlement monitoring interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, 60000); // Check every minute
   }
 
@@ -536,7 +550,14 @@ export class MediatorNode {
     setInterval(async () => {
       if (!this.isRunning) return;
 
-      await this.challengeManager.monitorChallenges();
+      try {
+        await this.challengeManager.monitorChallenges();
+      } catch (error) {
+        logger.error('Error in challenge monitoring interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, 60000); // Check every minute
 
     // Scan for challengeable settlements from other mediators
@@ -544,7 +565,14 @@ export class MediatorNode {
     setInterval(async () => {
       if (!this.isRunning) return;
 
-      await this.scanForChallengeableSettlements();
+      try {
+        await this.scanForChallengeableSettlements();
+      } catch (error) {
+        logger.error('Error in challengeable settlements scan interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, checkInterval);
   }
 
@@ -581,17 +609,40 @@ export class MediatorNode {
           continue; // Already challenged
         }
 
-        // Fetch the original intents
-        const [intentAResponse, intentBResponse] = await Promise.all([
-          axios.get(
-            `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashA}`
-          ),
-          axios.get(
-            `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashB}`
-          ),
-        ]);
+        // Fetch the original intents with individual error handling
+        let intentAResponse, intentBResponse;
+        try {
+          [intentAResponse, intentBResponse] = await Promise.all([
+            axios.get(
+              `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashA}`
+            ).catch(err => {
+              logger.warn('Failed to fetch intent A for settlement', {
+                settlementId: settlement.id,
+                intentHash: settlement.intentHashA,
+                error: err instanceof Error ? err.message : 'Unknown error',
+              });
+              return null;
+            }),
+            axios.get(
+              `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashB}`
+            ).catch(err => {
+              logger.warn('Failed to fetch intent B for settlement', {
+                settlementId: settlement.id,
+                intentHash: settlement.intentHashB,
+                error: err instanceof Error ? err.message : 'Unknown error',
+              });
+              return null;
+            }),
+          ]);
+        } catch (error) {
+          logger.error('Unexpected error fetching intents for settlement', {
+            settlementId: settlement.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+          continue;
+        }
 
-        if (!intentAResponse.data || !intentBResponse.data) {
+        if (!intentAResponse?.data || !intentBResponse?.data) {
           continue;
         }
 
@@ -649,14 +700,28 @@ export class MediatorNode {
     setInterval(async () => {
       if (!this.isRunning) return;
 
-      await this.checkForVerificationRequests();
+      try {
+        await this.checkForVerificationRequests();
+      } catch (error) {
+        logger.error('Error in verification requests monitoring interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, 60000); // Check every minute
 
     // Monitor ongoing verifications for timeout/completion
     setInterval(async () => {
       if (!this.isRunning) return;
 
-      await this.semanticConsensusManager.checkVerificationTimeouts();
+      try {
+        await this.semanticConsensusManager.checkVerificationTimeouts();
+      } catch (error) {
+        logger.error('Error in verification timeout checking interval', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
     }, 60000); // Check every minute
   }
 
@@ -740,11 +805,22 @@ export class MediatorNode {
       setInterval(async () => {
         if (!this.isRunning) return;
 
-        await this.submissionTracker.processRefunds();
+        try {
+          await this.submissionTracker.processRefunds();
+        } catch (error) {
+          logger.error('Error in refund processing interval', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+        }
       }, 24 * 60 * 60 * 1000); // Check daily
 
-      // Initial refund check
-      this.submissionTracker.processRefunds();
+      // Initial refund check with error handling
+      this.submissionTracker.processRefunds().catch(error => {
+        logger.error('Error in initial refund check', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      });
     }
 
     // Monitor spam proofs if enabled
@@ -752,14 +828,28 @@ export class MediatorNode {
       setInterval(async () => {
         if (!this.isRunning) return;
 
-        await this.spamProofDetector.monitorSpamProofs();
+        try {
+          await this.spamProofDetector.monitorSpamProofs();
+        } catch (error) {
+          logger.error('Error in spam proof monitoring interval', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+        }
       }, 60000); // Check every minute
 
       // Scan for spam intents periodically
       setInterval(async () => {
         if (!this.isRunning) return;
 
-        await this.scanForSpamIntents();
+        try {
+          await this.scanForSpamIntents();
+        } catch (error) {
+          logger.error('Error in spam intent scan interval', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+        }
       }, 5 * 60 * 1000); // Check every 5 minutes
     }
   }
