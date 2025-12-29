@@ -6,6 +6,7 @@
  */
 
 import axios from 'axios';
+import { randomBytes, randomInt } from 'crypto';
 import { EventEmitter } from 'events';
 import { MediatorConfig, ProposedSettlement } from '../types';
 import { logger } from '../utils/logger';
@@ -146,7 +147,7 @@ export class MediatorNetworkCoordinator extends EventEmitter {
 
     // Create claim
     const claim: WorkClaim = {
-      claimId: `claim_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      claimId: `claim_${Date.now()}_${randomBytes(6).toString('hex')}`,
       mediatorId: this.config.mediatorPublicKey!,
       intentHashA,
       intentHashB,
@@ -443,12 +444,12 @@ export class MediatorNetworkCoordinator extends EventEmitter {
   }
 
   /**
-   * Shuffle array (Fisher-Yates)
+   * Shuffle array (Fisher-Yates) using cryptographically secure randomness
    */
   private shuffleArray<T>(array: T[]): T[] {
     const shuffled = [...array];
     for (let i = shuffled.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
+      const j = randomInt(0, i + 1);
       [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     }
     return shuffled;

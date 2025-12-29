@@ -718,11 +718,11 @@ export class MP05CapitalizationManager {
   // Private helper methods
 
   private generateEventId(): string {
-    return `cap-event-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `cap-event-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
   }
 
   private generateInterfaceId(): string {
-    return `cap-iface-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    return `cap-iface-${Date.now()}-${crypto.randomBytes(6).toString('hex')}`;
   }
 
   private calculateEventHash(event: CapitalizationEvent): string {
