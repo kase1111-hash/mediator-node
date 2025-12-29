@@ -1,4 +1,4 @@
-import { createHash, createVerify } from 'crypto';
+import { createHash, createVerify, randomBytes, timingSafeEqual } from 'crypto';
 import { AuthenticationMessage } from '../types';
 import { logger } from '../utils/logger';
 
@@ -253,7 +253,16 @@ export class AuthenticationService {
       .update(messageData)
       .digest('base64');
 
-    return message.signature === expectedSignature;
+    // SECURITY: Use timing-safe comparison to prevent timing attacks
+    try {
+      return timingSafeEqual(
+        Buffer.from(message.signature, 'base64'),
+        Buffer.from(expectedSignature, 'base64')
+      );
+    } catch {
+      // If buffers have different lengths, comparison fails
+      return false;
+    }
   }
 
   /**
@@ -276,11 +285,14 @@ export class AuthenticationService {
   }
 
   /**
-   * Generate nonce for authentication
+   * Generate cryptographically secure nonce for authentication
+   *
+   * SECURITY: Uses crypto.randomBytes() for cryptographic randomness
+   * instead of Math.random() which is not cryptographically secure.
    */
   public static generateNonce(): string {
     return createHash('sha256')
-      .update(`${Date.now()}-${Math.random()}`)
+      .update(`${Date.now()}-${randomBytes(32).toString('hex')}`)
       .digest('hex');
   }
 
