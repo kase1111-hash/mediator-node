@@ -5,6 +5,7 @@
  * reducing redundant LLM calls and improving throughput.
  */
 
+import { randomBytes } from 'crypto';
 import { Intent, AlignmentCandidate, MediatorConfig } from '../types';
 import { VectorDatabase } from './VectorDatabase';
 import { logger } from '../utils/logger';
@@ -94,7 +95,7 @@ export class IntentClusteringService {
         return nearestCluster;
       } else {
         // Create new cluster
-        const clusterId = `cluster_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const clusterId = `cluster_${Date.now()}_${randomBytes(6).toString('hex')}`;
         const cluster: IntentCluster = {
           clusterId,
           centroid: [...embedding],

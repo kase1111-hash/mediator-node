@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { randomBytes } from 'crypto';
 import { MediatorConfig, Stake } from '../types';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';
@@ -602,7 +603,7 @@ export class ValidatorRotationManager {
   private recordRotationEvent(event: Omit<RotationEvent, 'eventId' | 'timestamp'>): void {
     const rotationEvent: RotationEvent = {
       ...event,
-      eventId: `rotation-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+      eventId: `rotation-${Date.now()}-${randomBytes(6).toString('hex')}`,
       timestamp: Date.now(),
     };
 

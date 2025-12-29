@@ -9,6 +9,7 @@
  * - Injection attack testing
  */
 
+import { randomBytes } from 'crypto';
 import { VulnerabilityScanner, ScanResult, VulnerabilityFinding } from './VulnerabilityScanner';
 import { detectPromptInjection, sanitizeForPrompt, validateLLMInput } from '../utils/prompt-security';
 import { validatePathWithinDirectory, sanitizeFilename } from '../validation/schemas';
@@ -352,7 +353,7 @@ export class SecurityTestRunner {
       try {
         const result = await testCase.test();
         results.push({
-          testId: `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          testId: `test-${Date.now()}-${randomBytes(6).toString('hex')}`,
           category: testCase.category,
           name: testCase.name,
           passed: result.passed,
@@ -361,7 +362,7 @@ export class SecurityTestRunner {
         });
       } catch (error: any) {
         results.push({
-          testId: `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          testId: `test-${Date.now()}-${randomBytes(6).toString('hex')}`,
           category: testCase.category,
           name: testCase.name,
           passed: false,
@@ -413,7 +414,7 @@ export class SecurityTestRunner {
       try {
         const result = await testCase.test();
         results.push({
-          testId: `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          testId: `test-${Date.now()}-${randomBytes(6).toString('hex')}`,
           category: testCase.category,
           name: testCase.name,
           passed: result.passed,
@@ -422,7 +423,7 @@ export class SecurityTestRunner {
         });
       } catch (error: any) {
         results.push({
-          testId: `test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          testId: `test-${Date.now()}-${randomBytes(6).toString('hex')}`,
           category: testCase.category,
           name: testCase.name,
           passed: false,
