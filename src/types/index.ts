@@ -850,6 +850,7 @@ export interface MediatorConfig {
   webSocketAuthRequired?: boolean; // Require authentication for WebSocket connections (default: true)
   webSocketMaxConnections?: number; // Maximum concurrent WebSocket connections (default: 1000)
   webSocketHeartbeatInterval?: number; // Heartbeat interval in ms (default: 30000)
+  webSocketAllowedOrigins?: string[]; // Allowed CORS origins (default: ['*'] - configure for production!)
 
   // Monitoring & Analytics configuration
   enableMonitoring?: boolean; // Enable health and performance monitoring (default: true)

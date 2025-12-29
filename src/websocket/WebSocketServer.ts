@@ -25,7 +25,11 @@ export interface WebSocketServerConfig {
   authTimeout?: number; // Milliseconds before unauthenticated connection is closed
   heartbeatInterval?: number; // Milliseconds between heartbeats
   maxConnections?: number;
-  allowedOrigins?: string[];
+  /**
+   * Allowed origins for CORS. Must be explicitly configured.
+   * Use ['*'] only in development - not recommended for production.
+   */
+  allowedOrigins: string[];
   enableCompression?: boolean;
 }
 
@@ -45,15 +49,20 @@ export class WebSocketServer {
   private authService: AuthenticationService;
 
   constructor(config: WebSocketServerConfig, authService?: AuthenticationService) {
+    // SECURITY: Warn if wildcard CORS is used
+    if (config.allowedOrigins.includes('*')) {
+      logger.warn('WebSocket server configured with wildcard CORS origin (*). This is not recommended for production.');
+    }
+
     this.config = {
+      // Apply config first, then set defaults for missing values
+      ...config,
       host: config.host || '0.0.0.0',
       authRequired: config.authRequired ?? true,
       authTimeout: config.authTimeout || 30000, // 30 seconds default
       heartbeatInterval: config.heartbeatInterval || 30000, // 30 seconds
       maxConnections: config.maxConnections || 1000,
-      allowedOrigins: config.allowedOrigins || ['*'],
       enableCompression: config.enableCompression ?? true,
-      ...config,
     };
 
     this.connections = new Map();
