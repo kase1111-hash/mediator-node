@@ -139,6 +139,7 @@ export class MediatorNode {
         authRequired: config.webSocketAuthRequired ?? true,
         maxConnections: config.webSocketMaxConnections || 1000,
         heartbeatInterval: config.webSocketHeartbeatInterval || 30000,
+        allowedOrigins: config.webSocketAllowedOrigins || ['*'],
       });
 
       this.eventPublisher = new EventPublisher(this.webSocketServer);

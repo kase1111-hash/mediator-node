@@ -103,11 +103,14 @@ export function verifySignature(data: string, signature: string, publicKey: stri
  * In production, keys should be generated securely offline and stored in
  * environment variables or a secure key management system.
  *
+ * SECURITY: Uses 3072-bit RSA keys for long-term security margin.
+ * NIST recommends 3072-bit RSA for protection beyond 2030.
+ *
  * @returns Object containing privateKey and publicKey in PEM format
  */
 export function generateKeyPair(): { privateKey: string; publicKey: string } {
   const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
-    modulusLength: 2048,
+    modulusLength: 3072,
     publicKeyEncoding: {
       type: 'spki',
       format: 'pem',
