@@ -6,5 +6,6 @@
  */
 
 export { HealthMonitor, HealthChecker } from './HealthMonitor';
+export { HealthServer, HealthServerConfig } from './HealthServer';
 export { PerformanceAnalytics } from './PerformanceAnalytics';
 export { MonitoringPublisher } from './MonitoringPublisher';
