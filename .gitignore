@@ -14,3 +14,4 @@ data/
 test-data/
 benchmark-data/
 benchmark-results.json
+logs/
