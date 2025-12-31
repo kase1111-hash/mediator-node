@@ -1,6 +1,6 @@
 # Documentation Index
 
-**Last Updated:** December 24, 2025
+**Last Updated:** December 31, 2025
 
 This index provides a clear guide to all documentation in the mediator-node repository.
 
@@ -12,6 +12,10 @@ This index provides a clear guide to all documentation in the mediator-node repo
 - **[README.md](./README.md)** - Project overview, features, and architecture summary
 - **[QUICKSTART.md](./QUICKSTART.md)** - Get running in 5 minutes with Docker or manual setup
 - **[INTEGRATION.md](./INTEGRATION.md)** - Integration guide for connecting to NatLangChain
+
+### API & Operations
+- **[docs/API.md](./docs/API.md)** - Complete API reference (HTTP endpoints, WebSocket events, ChainClient)
+- **[docs/OPERATIONS.md](./docs/OPERATIONS.md)** - Operations runbook for production deployment
 
 ### Architecture & Design
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Detailed system architecture and component design
@@ -35,11 +39,11 @@ This index provides a clear guide to all documentation in the mediator-node repo
 
 All extension protocols are **fully implemented**. Standalone specification documents:
 
-- **[MP-02-spec.md](./MP-02-spec.md)** - Proof-of-Effort Receipt Protocol
-- **[MP-03-spec.md](./MP-03-spec.md)** - Dispute & Escalation System
-- **[MP-04-spec.md](./MP-04-spec.md)** - Licensing & Delegation Protocol
-- **[MP-05-spec.md](./MP-05-spec.md)** - Settlement & Capitalization Protocol
-- **[MP-06-spec.md](./MP-06-spec.md)** - Behavioral Pressure & Anti-Entropy Controls
+- **[docs/MP-02-spec.md](./docs/MP-02-spec.md)** - Proof-of-Effort Receipt Protocol
+- **[docs/MP-03-spec.md](./docs/MP-03-spec.md)** - Dispute & Escalation System
+- **[docs/MP-04-spec.md](./docs/MP-04-spec.md)** - Licensing & Delegation Protocol
+- **[docs/MP-05-spec.md](./docs/MP-05-spec.md)** - Settlement & Capitalization Protocol
+- **[docs/MP-06-spec.md](./docs/MP-06-spec.md)** - Behavioral Pressure & Anti-Entropy Controls
 
 ---
 
@@ -67,6 +71,12 @@ All extension protocols are **fully implemented**. Standalone specification docu
 
 **...integrate with my chain**
 → Follow [INTEGRATION.md](./INTEGRATION.md)
+
+**...use the API**
+→ Reference [docs/API.md](./docs/API.md)
+
+**...deploy to production**
+→ Follow [docs/OPERATIONS.md](./docs/OPERATIONS.md)
 
 **...contribute to the project**
 → Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
@@ -168,6 +178,8 @@ src/
 ├── sybil/                         # Sybil resistance
 │   ├── SpamProofDetector.ts
 │   └── SubmissionTracker.ts
+├── monitoring/                    # Health monitoring
+│   └── HealthServer.ts
 ├── security/                      # Automated security testing
 │   ├── VulnerabilityScanner.ts
 │   ├── SecurityTestRunner.ts
@@ -202,6 +214,6 @@ test/
 
 ---
 
-**Total Documentation:** 11 core docs + 5 protocol specs = 16 files
+**Total Documentation:** 13 core docs + 5 protocol specs = 18 files
 **Implementation Status:** All protocols (MP-01 through MP-06) fully implemented
 **Test Coverage:** 1261+ tests across all modules
