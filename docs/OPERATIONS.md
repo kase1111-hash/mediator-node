@@ -67,10 +67,30 @@ npm run start
 | `HEALTH_PORT` | No | Health check port (default: 8081) |
 | `WS_PORT` | No | WebSocket port (default: 9000) |
 | `LOG_LEVEL` | No | `debug`, `info`, `warn`, `error` |
+| `LOG_DIR` | No | Log file directory (default: `./logs`) |
 
 ---
 
 ## Configuration
+
+### Log Rotation
+
+Logs are automatically rotated using the following strategy:
+
+| Log Type | Rotation | Retention | Max Size |
+|----------|----------|-----------|----------|
+| Error logs | Daily | 14 days | 20MB |
+| Combined logs | Daily | 7 days | 50MB |
+
+Log files are compressed (gzipped) after rotation. Configure the log directory:
+
+```bash
+LOG_DIR=/var/log/mediator-node
+```
+
+Log files:
+- `logs/error-YYYY-MM-DD.log` - Error-level logs only
+- `logs/combined-YYYY-MM-DD.log` - All log levels
 
 ### Consensus Modes
 
