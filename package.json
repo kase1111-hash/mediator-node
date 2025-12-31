@@ -19,6 +19,7 @@
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f mediator-node",
     "mock-chain": "cd examples/mock-chain && npm install && npm start",
+    "benchmark": "ts-node benchmark/core-operations.ts",
     "prepare": "husky"
   },
   "keywords": [

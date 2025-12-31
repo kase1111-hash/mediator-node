@@ -12,3 +12,5 @@ cache/
 .mediator-data/
 data/
 test-data/
+benchmark-data/
+benchmark-results.json
