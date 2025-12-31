@@ -36,7 +36,24 @@ The Mediator Node is a standalone service that:
 
 ## Quick Start
 
-**Want to get started fast?** See [QUICKSTART.md](./QUICKSTART.md) for a 5-minute setup with Docker Compose!
+Get running in under 5 minutes with Docker Compose:
+
+```bash
+# Clone and enter repository
+git clone https://github.com/kase1111-hash/mediator-node.git
+cd mediator-node
+
+# Set your API key
+export ANTHROPIC_API_KEY=your-key-here
+
+# Start mock chain + mediator
+docker-compose up
+```
+
+Watch it work:
+```bash
+docker-compose logs -f mediator-node
+```
 
 ## Installation
 
@@ -97,7 +114,7 @@ export ANTHROPIC_API_KEY=your-key-here
 docker-compose up
 ```
 
-See [QUICKSTART.md](./QUICKSTART.md) for details.
+The system will start a mock chain with example intents and begin the alignment cycle automatically.
 
 ### Option 2: Local Development
 
@@ -240,8 +257,7 @@ mediator-node/
 │   ├── cli.ts              # CLI interface
 │   └── index.ts            # Library exports
 ├── spec.md                 # Protocol specification
-├── step-by-step.md         # Implementation guide
-├── Foundation.md           # Genesis document
+├── docs/                   # Extended protocol specs (MP-02 through MP-06)
 └── package.json
 ```
 
@@ -363,8 +379,9 @@ MIT License - see [LICENSE](./LICENSE)
 ## Documentation
 
 - [Protocol Specification](./spec.md) - MP-01 mediator protocol
-- [Step-by-Step Guide](./step-by-step.md) - Implementation walkthrough
-- [Foundation Document](./Foundation.md) - Genesis intent & principles
+- [Architecture Guide](./ARCHITECTURE.md) - System design deep dive
+- [Integration Guide](./INTEGRATION.md) - API details and multi-chain setup
+- [API Reference](./docs/API.md) - Complete HTTP and WebSocket API
 
 ## Support
 

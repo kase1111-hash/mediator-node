@@ -1,16 +1,13 @@
 # Documentation Index
 
-**Last Updated:** December 31, 2025
-
 This index provides a clear guide to all documentation in the mediator-node repository.
 
 ---
 
-## 📚 Core Documentation
+## Core Documentation
 
 ### Getting Started
-- **[README.md](./README.md)** - Project overview, features, and architecture summary
-- **[QUICKSTART.md](./QUICKSTART.md)** - Get running in 5 minutes with Docker or manual setup
+- **[README.md](./README.md)** - Project overview, quick start, features, and architecture summary
 - **[INTEGRATION.md](./INTEGRATION.md)** - Integration guide for connecting to NatLangChain
 
 ### API & Operations
@@ -19,13 +16,10 @@ This index provides a clear guide to all documentation in the mediator-node repo
 
 ### Architecture & Design
 - **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Detailed system architecture and component design
-- **[spec.md](./spec.md)** - Complete protocol specification (MP-01 through MP-06)
-
-### Implementation Status
-- **[IMPLEMENTATION-VERIFICATION.md](./IMPLEMENTATION-VERIFICATION.md)** - Feature completion status and verification steps
+- **[spec.md](./spec.md)** - Complete protocol specification (MP-01)
 
 ### Security
-- **[docs/SECURITY_HARDENING.md](./docs/SECURITY_HARDENING.md)** - Complete security audit and hardening guide
+- **[docs/SECURITY_HARDENING.md](./docs/SECURITY_HARDENING.md)** - Security audit and hardening guide
 
 ### Community & Governance
 - **[CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)** - Community standards and behavior guidelines
@@ -35,7 +29,7 @@ This index provides a clear guide to all documentation in the mediator-node repo
 
 ---
 
-## 📋 Protocol Specifications
+## Protocol Specifications
 
 All extension protocols are **fully implemented**. Standalone specification documents:
 
@@ -47,98 +41,23 @@ All extension protocols are **fully implemented**. Standalone specification docu
 
 ---
 
-## 🎯 Quick Reference by Use Case
+## Quick Reference by Use Case
 
-### I want to...
-
-**...understand what this project does**
-→ Start with [README.md](./README.md)
-
-**...run the mediator node**
-→ Follow [QUICKSTART.md](./QUICKSTART.md)
-
-**...understand the architecture**
-→ Read [ARCHITECTURE.md](./ARCHITECTURE.md)
-
-**...implement/extend the protocol**
-→ Study [spec.md](./spec.md) and relevant MP-XX specs
-
-**...verify security**
-→ Review [docs/SECURITY_HARDENING.md](./docs/SECURITY_HARDENING.md)
-
-**...check feature status**
-→ See [IMPLEMENTATION-VERIFICATION.md](./IMPLEMENTATION-VERIFICATION.md)
-
-**...integrate with my chain**
-→ Follow [INTEGRATION.md](./INTEGRATION.md)
-
-**...use the API**
-→ Reference [docs/API.md](./docs/API.md)
-
-**...deploy to production**
-→ Follow [docs/OPERATIONS.md](./docs/OPERATIONS.md)
-
-**...contribute to the project**
-→ Read [CONTRIBUTING.md](./CONTRIBUTING.md) and [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
-
-**...understand the ethical commitments**
-→ Review [Founding-Contributor-Pledge.md](./Founding-Contributor-Pledge.md)
+| I want to... | Read this |
+|--------------|-----------|
+| Understand what this project does | [README.md](./README.md) |
+| Run the mediator node | [README.md](./README.md) (Quick Start section) |
+| Understand the architecture | [ARCHITECTURE.md](./ARCHITECTURE.md) |
+| Implement/extend the protocol | [spec.md](./spec.md) and MP-XX specs in `docs/` |
+| Verify security | [docs/SECURITY_HARDENING.md](./docs/SECURITY_HARDENING.md) |
+| Integrate with my chain | [INTEGRATION.md](./INTEGRATION.md) |
+| Use the API | [docs/API.md](./docs/API.md) |
+| Deploy to production | [docs/OPERATIONS.md](./docs/OPERATIONS.md) |
+| Contribute to the project | [CONTRIBUTING.md](./CONTRIBUTING.md) |
 
 ---
 
-## 📊 Implementation Status Summary
-
-### ✅ Fully Implemented (100%)
-
-**Core Protocol (MP-01)**
-- Alignment cycle (ingest, map, negotiate, submit)
-- Consensus modes (Permissionless, DPoS, PoA, Hybrid)
-- Reputation system
-- Challenge proof submission
-- Sybil resistance mechanisms
-
-**Extension Protocols**
-- MP-02: Proof-of-Effort (`src/effort/`)
-- MP-03: Dispute & Escalation (`src/dispute/`)
-- MP-04: Licensing & Delegation (`src/licensing/`)
-- MP-05: Settlement & Capitalization (`src/settlement/`)
-- MP-06: Behavioral Pressure (`src/burn/`)
-
-**Infrastructure**
-- WebSocket real-time updates
-- Intent clustering & batch mediation
-- ML-based candidate prioritization (HNSW)
-- Distributed mediator coordination
-- Multi-chain orchestration
-- Semantic consensus verification
-- Complete governance system
-- DPoS validator rotation (slot-based scheduling)
-- Automated security testing framework
-- Comprehensive test suite (1261+ tests)
-
-### ⚠️ Enhancement Opportunities (Non-Critical)
-- Fee distribution to delegators
-- Custom chain integration abstraction
-- Unbonding period enforcement
-- Process management (daemon mode)
-
----
-
-## 📝 Documentation Organization
-
-### Removed/Consolidated Files
-
-The following files were consolidated to reduce redundancy:
-
-- ❌ **negotiation-protocol.md** - Content integrated into spec.md
-- ❌ **step-by-step.md** - Content integrated into QUICKSTART.md
-- ❌ **Foundation.md** - Genesis document, content referenced in spec.md
-
-These consolidations reduce maintenance burden while preserving all technical content.
-
----
-
-## 🔧 Developer Reference
+## Developer Reference
 
 ### Key Code Locations
 
@@ -206,14 +125,8 @@ test/
 
 ---
 
-## 📧 Support & Contribution
+## Support & Contribution
 
 - **Issues:** https://github.com/kase1111-hash/mediator-node/issues
 - **Discussions:** https://github.com/kase1111-hash/mediator-node/discussions
 - **Contact:** kase1111@gmail.com
-
----
-
-**Total Documentation:** 13 core docs + 5 protocol specs = 18 files
-**Implementation Status:** All protocols (MP-01 through MP-06) fully implemented
-**Test Coverage:** 1261+ tests across all modules
