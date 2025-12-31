@@ -75,6 +75,7 @@ export class MediatorNetworkCoordinator extends EventEmitter {
   private peers: Map<string, PeerMediator> = new Map();
   private workClaims: Map<string, WorkClaim> = new Map(); // claimKey -> claim
   private myLoad: number = 0;
+  private activeSettlementsCount: number = 0;
 
   private heartbeatInterval?: NodeJS.Timeout;
   private discoveryInterval?: NodeJS.Timeout;
@@ -217,8 +218,6 @@ export class MediatorNetworkCoordinator extends EventEmitter {
     settlement: ProposedSettlement,
     required: number = 3
   ): Promise<{ peerId: string; summary: string; approved: boolean }[]> {
-    const responses: { peerId: string; summary: string; approved: boolean }[] = [];
-
     // Select random peers with semantic_consensus capability
     const eligiblePeers = Array.from(this.peers.values()).filter((peer) =>
       peer.capabilities.includes('semantic_consensus')
@@ -271,6 +270,13 @@ export class MediatorNetworkCoordinator extends EventEmitter {
    */
   public updateLoad(load: number): void {
     this.myLoad = Math.max(0, Math.min(100, load));
+  }
+
+  /**
+   * Update active settlements count for heartbeat reporting
+   */
+  public updateActiveSettlements(count: number): void {
+    this.activeSettlementsCount = Math.max(0, count);
   }
 
   /**
@@ -356,7 +362,7 @@ export class MediatorNetworkCoordinator extends EventEmitter {
       timestamp: Date.now(),
       payload: {
         load: this.myLoad,
-        activeSettlements: 0, // TODO: Get from settlement manager
+        activeSettlements: this.activeSettlementsCount,
       },
     });
   }
@@ -406,7 +412,7 @@ export class MediatorNetworkCoordinator extends EventEmitter {
         await axios.post(`${peer.endpoint}/api/coordination/message`, message, {
           timeout: 5000,
         });
-      } catch (error) {
+      } catch {
         // Ignore individual broadcast failures
       }
     });

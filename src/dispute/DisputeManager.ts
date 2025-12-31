@@ -7,11 +7,13 @@ import {
   DisputeStatus,
   DisputeTimelineEntry,
   EscalationAuthorityType,
+  Intent,
+  ProposedSettlement,
+  EffortReceipt,
 } from '../types';
 import { LLMProvider } from '../llm/LLMProvider';
 import { nanoid } from 'nanoid';
 import * as fs from 'fs';
-import * as path from 'path';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 import { EvidenceManager } from './EvidenceManager';
@@ -33,6 +35,15 @@ import {
 } from '../validation';
 
 /**
+ * Data providers for fetching related data when building dispute packages
+ */
+export interface DisputeDataProviders {
+  getRelatedIntents?: (disputeId: string) => Promise<Intent[]>;
+  getRelatedSettlements?: (disputeId: string) => Promise<ProposedSettlement[]>;
+  getRelatedReceipts?: (disputeId: string) => Promise<EffortReceipt[]>;
+}
+
+/**
  * Manages dispute declarations and lifecycle
  * Handles initiation, evidence tracking, and status updates
  */
@@ -46,6 +57,7 @@ export class DisputeManager {
   private packageBuilder: DisputePackageBuilder;
   private outcomeRecorder: OutcomeRecorder;
   private llmProvider?: LLMProvider;
+  private dataProviders?: DisputeDataProviders;
 
   constructor(
     config: MediatorConfig,
@@ -884,15 +896,26 @@ No automated judgment is rendered by this system.
       ? this.clarificationManager.getClarificationsForDispute(params.disputeId)
       : [];
 
+    // Fetch related data using providers if available
+    const intents = this.dataProviders?.getRelatedIntents
+      ? await this.dataProviders.getRelatedIntents(params.disputeId)
+      : [];
+    const settlements = this.dataProviders?.getRelatedSettlements
+      ? await this.dataProviders.getRelatedSettlements(params.disputeId)
+      : [];
+    const receipts = this.dataProviders?.getRelatedReceipts
+      ? await this.dataProviders.getRelatedReceipts(params.disputeId)
+      : [];
+
     // Build package
     const result = await this.packageBuilder.buildPackage({
       dispute,
       timeline,
       evidence,
       clarifications,
-      intents: [], // TODO: Fetch related intents if available
-      settlements: [], // TODO: Fetch related settlements if available
-      receipts: [], // TODO: Fetch related receipts if available
+      intents,
+      settlements,
+      receipts,
       createdBy: params.createdBy,
       options: params.options,
     });
@@ -946,6 +969,14 @@ No automated judgment is rendered by this system.
    */
   public getPackageBuilder(): DisputePackageBuilder {
     return this.packageBuilder;
+  }
+
+  /**
+   * Set data providers for fetching related intents, settlements, and receipts
+   * when building dispute packages
+   */
+  public setDataProviders(providers: DisputeDataProviders): void {
+    this.dataProviders = providers;
   }
 
   /**

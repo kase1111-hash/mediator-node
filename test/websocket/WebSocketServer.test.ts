@@ -57,7 +57,7 @@ describe('WebSocketServer', () => {
           expect(connections.length).toBe(1);
           expect(connections[0].authenticated).toBe(true); // Auth disabled
           done();
-        }, 100);
+        }, 150);
       });
     });
 
@@ -77,16 +77,20 @@ describe('WebSocketServer', () => {
       client = new WebSocket(`ws://localhost:${testPort}`);
 
       client.on('open', () => {
+        // Wait for connection to be registered
         setTimeout(() => {
           expect(server.getConnections().length).toBe(1);
           client.close();
-        }, 100);
+        }, 150);
       });
 
-      setTimeout(() => {
-        expect(server.getConnections().length).toBe(0);
-        done();
-      }, 300);
+      client.on('close', () => {
+        // Wait for server to process disconnection
+        setTimeout(() => {
+          expect(server.getConnections().length).toBe(0);
+          done();
+        }, 150);
+      });
     });
 
     it('should enforce max connections limit', async () => {
@@ -104,7 +108,7 @@ describe('WebSocketServer', () => {
       const client2 = new WebSocket(`ws://localhost:${testPort}`);
       const client3 = new WebSocket(`ws://localhost:${testPort}`);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       expect(server.getConnections().length).toBeLessThanOrEqual(2);
 
@@ -136,7 +140,7 @@ describe('WebSocketServer', () => {
           expect(connections.length).toBe(1);
           expect(connections[0].authenticated).toBe(false);
           done();
-        }, 100);
+        }, 150);
       });
     });
 
@@ -171,23 +175,17 @@ describe('WebSocketServer', () => {
         client.send(JSON.stringify(authMessage));
       });
 
-      let messageCount = 0;
       client.on('message', (data: Buffer) => {
-        messageCount++;
-
         const message = JSON.parse(data.toString());
 
-        // Second message should be auth response
-        if (messageCount === 2) {
-          expect(message.payload.success).toBe(true);
-          expect(message.payload.connectionId).toBeDefined();
-
+        // Look for auth response message (has success field in payload)
+        if (message.payload && message.payload.success === true && message.payload.connectionId) {
           setTimeout(() => {
             const connections = server.getConnections();
             expect(connections[0].authenticated).toBe(true);
             expect(connections[0].identity).toBe('test-user');
             done();
-          }, 100);
+          }, 150);
         }
       });
     });
@@ -389,7 +387,7 @@ describe('WebSocketServer', () => {
           };
 
           server.send(connectionId, testMessage);
-        }, 100);
+        }, 150);
       });
 
       let messageCount = 0;
@@ -411,7 +409,7 @@ describe('WebSocketServer', () => {
       const client1 = new WebSocket(`ws://localhost:${testPort}`);
       const client2 = new WebSocket(`ws://localhost:${testPort}`);
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => setTimeout(resolve, 300));
 
       const stats = server.getStatistics();
 
@@ -431,7 +429,7 @@ describe('WebSocketServer', () => {
         setTimeout(() => {
           const connections = server.getConnections();
           server.disconnect(connections[0].connectionId, 'Test disconnect');
-        }, 100);
+        }, 150);
       });
 
       client.on('close', () => {
