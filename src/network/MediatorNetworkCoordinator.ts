@@ -233,36 +233,37 @@ export class MediatorNetworkCoordinator extends EventEmitter {
       payload: { settlement, requester: this.config.mediatorPublicKey },
     };
 
-    // Send requests in parallel
-    const requests = selectedPeers.map(async (peer) => {
-      try {
-        const response = await axios.post(
-          `${peer.endpoint}/api/coordination/consensus`,
-          message,
-          { timeout: 30000 }
-        );
+    // Send requests in parallel using Promise.allSettled for better error handling
+    const requests = selectedPeers.map((peer) =>
+      axios.post(
+        `${peer.endpoint}/api/coordination/consensus`,
+        message,
+        { timeout: 30000 }
+      ).then((response) => ({
+        peerId: peer.peerId,
+        summary: response.data.summary,
+        approved: response.data.approved,
+      }))
+    );
 
-        return {
-          peerId: peer.peerId,
-          summary: response.data.summary,
-          approved: response.data.approved,
-        };
-      } catch (error: any) {
+    const results = await Promise.allSettled(requests);
+
+    // Process settled results - extract fulfilled values and log rejections
+    const successfulResponses: { peerId: string; summary: string; approved: boolean }[] = [];
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        successfulResponses.push(result.value);
+      } else {
+        const peer = selectedPeers[index];
         logger.warn('Consensus request failed', {
           peerId: peer.peerId,
-          error: error.message,
+          error: result.reason instanceof Error ? result.reason.message : 'Unknown error',
         });
-        return null;
       }
     });
 
-    const results = await Promise.all(requests);
-
-    return results.filter((r) => r !== null) as {
-      peerId: string;
-      summary: string;
-      approved: boolean;
-    }[];
+    return successfulResponses;
   }
 
   /**
