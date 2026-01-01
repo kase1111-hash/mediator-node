@@ -1,4 +1,3 @@
-import { nanoid } from 'nanoid';
 import axios from 'axios';
 import crypto from 'crypto';
 import {
@@ -8,13 +7,13 @@ import {
   VerificationRequest,
   VerificationResponse,
   SemanticVerification,
-  VerificationStatus,
   SemanticEquivalenceResult,
 } from '../types';
 import { LLMProvider } from '../llm/LLMProvider';
 import { ReputationTracker } from '../reputation/ReputationTracker';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';
+import { withTimeout, TimeoutError, DEFAULT_TIMEOUTS } from '../utils/timeout';
 
 /**
  * SemanticConsensusManager handles distributed verification of high-value settlements
@@ -149,10 +148,14 @@ export class SemanticConsensusManager {
    * Select verifiers using weighted random selection based on reputation
    */
   private async selectVerifiers(excludeMediatorId: string): Promise<string[]> {
+    const timeoutMs = this.config.verifierSelectionTimeoutMs || DEFAULT_TIMEOUTS.apiRequest;
+
     try {
-      // Fetch available mediators from chain
-      const response = await axios.get(
-        `${this.config.chainEndpoint}/api/v1/mediators/active`
+      // Fetch available mediators from chain with timeout
+      const response = await withTimeout(
+        () => axios.get(`${this.config.chainEndpoint}/api/v1/mediators/active`),
+        timeoutMs,
+        'Verifier selection'
       );
 
       if (!response.data || !Array.isArray(response.data.mediators)) {
@@ -179,7 +182,14 @@ export class SemanticConsensusManager {
 
       return selected.map((m: any) => m.id);
     } catch (error) {
-      logger.error('Error selecting verifiers', { error });
+      if (error instanceof TimeoutError) {
+        logger.error('Verifier selection timed out', {
+          timeoutMs,
+          operation: error.operationName,
+        });
+      } else {
+        logger.error('Error selecting verifiers', { error });
+      }
       throw error;
     }
   }
@@ -247,16 +257,30 @@ export class SemanticConsensusManager {
    * Submit verification request to chain
    */
   private async submitVerificationRequest(request: VerificationRequest): Promise<void> {
+    const timeoutMs = this.config.chainRequestTimeoutMs || DEFAULT_TIMEOUTS.apiRequest;
+
     try {
-      await axios.post(`${this.config.chainEndpoint}/api/v1/verifications`, {
-        request,
-      });
+      await withTimeout(
+        () =>
+          axios.post(`${this.config.chainEndpoint}/api/v1/verifications`, {
+            request,
+          }),
+        timeoutMs,
+        'Submit verification request'
+      );
 
       logger.info('Verification request submitted to chain', {
         settlementId: request.settlementId,
       });
     } catch (error) {
-      logger.error('Error submitting verification request', { error });
+      if (error instanceof TimeoutError) {
+        logger.error('Verification request submission timed out', {
+          settlementId: request.settlementId,
+          timeoutMs,
+        });
+      } else {
+        logger.error('Error submitting verification request', { error });
+      }
       throw error;
     }
   }
@@ -451,19 +475,33 @@ Return ONLY the JSON object, no additional text.`;
    * Submit verification response to chain
    */
   private async submitResponseToChain(response: VerificationResponse): Promise<void> {
+    const timeoutMs = this.config.chainRequestTimeoutMs || DEFAULT_TIMEOUTS.apiRequest;
+
     try {
-      await axios.post(
-        `${this.config.chainEndpoint}/api/v1/verifications/${response.settlementId}/responses`,
-        {
-          response,
-        }
+      await withTimeout(
+        () =>
+          axios.post(
+            `${this.config.chainEndpoint}/api/v1/verifications/${response.settlementId}/responses`,
+            {
+              response,
+            }
+          ),
+        timeoutMs,
+        'Submit verification response'
       );
 
       logger.debug('Verification response submitted to chain', {
         settlementId: response.settlementId,
       });
     } catch (error) {
-      logger.error('Error submitting verification response', { error });
+      if (error instanceof TimeoutError) {
+        logger.error('Verification response submission timed out', {
+          settlementId: response.settlementId,
+          timeoutMs,
+        });
+      } else {
+        logger.error('Error submitting verification response', { error });
+      }
       throw error;
     }
   }
@@ -529,17 +567,29 @@ Return ONLY the JSON object, no additional text.`;
       return null;
     }
 
+    const timeoutMs = this.config.chainRequestTimeoutMs || DEFAULT_TIMEOUTS.apiRequest;
+
     // Fetch latest responses from chain
     try {
-      const response = await axios.get(
-        `${this.config.chainEndpoint}/api/v1/verifications/${settlementId}/responses`
+      const response = await withTimeout(
+        () =>
+          axios.get(
+            `${this.config.chainEndpoint}/api/v1/verifications/${settlementId}/responses`
+          ),
+        timeoutMs,
+        'Fetch verification responses'
       );
 
       if (response.data && Array.isArray(response.data.responses)) {
         verification.responses = response.data.responses;
       }
     } catch (error) {
-      logger.error('Error fetching verification responses', { error, settlementId });
+      if (error instanceof TimeoutError) {
+        logger.error('Fetching verification responses timed out', { settlementId, timeoutMs });
+      } else {
+        logger.error('Error fetching verification responses', { error, settlementId });
+      }
+      // Continue with existing responses
     }
 
     // Check for timeout
@@ -679,13 +729,20 @@ Return ONLY the JSON object, no additional text.`;
    */
   public async submitVerificationResponse(
     request: VerificationRequest,
-    settlement: ProposedSettlement
+    _settlement: ProposedSettlement
   ): Promise<VerificationResponse> {
-    // Fetch the intents
-    const [intentAResponse, intentBResponse] = await Promise.all([
-      axios.get(`${this.config.chainEndpoint}/api/v1/intents/${request.intentHashA}`),
-      axios.get(`${this.config.chainEndpoint}/api/v1/intents/${request.intentHashB}`),
-    ]);
+    const timeoutMs = this.config.chainRequestTimeoutMs || DEFAULT_TIMEOUTS.apiRequest;
+
+    // Fetch the intents with timeout
+    const [intentAResponse, intentBResponse] = await withTimeout(
+      () =>
+        Promise.all([
+          axios.get(`${this.config.chainEndpoint}/api/v1/intents/${request.intentHashA}`),
+          axios.get(`${this.config.chainEndpoint}/api/v1/intents/${request.intentHashB}`),
+        ]),
+      timeoutMs,
+      'Fetch intents for verification'
+    );
 
     const intentA = intentAResponse.data;
     const intentB = intentBResponse.data;
