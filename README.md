@@ -41,6 +41,16 @@ The Mediator Node is a standalone service that:
 - **MP-05**: Settlement & Capitalization Protocol - Settlement coordination
 - **MP-06**: Behavioral Pressure & Anti-Entropy Controls - Token burn economics
 
+### Security Apps Integration
+- **[Boundary Daemon](https://github.com/kase1111-hash/boundary-daemon-)**: Policy enforcement and audit logging
+  - Environment monitoring (network state, USB devices, processes)
+  - Six boundary modes (OPEN → LOCKDOWN)
+  - Tamper-evident cryptographic audit trails
+- **[Boundary SIEM](https://github.com/kase1111-hash/Boundary-SIEM)**: Security event management
+  - Real-time event correlation with blockchain-specific detection rules
+  - MITRE ATT&CK tactic/technique mapping
+  - Multi-protocol alerting (webhooks, Slack, email)
+
 ### Infrastructure
 - Real-time WebSocket event streaming
 - Health monitoring with Kubernetes-compatible probes
@@ -398,6 +408,28 @@ In DPoS mode, stake is at risk for:
 - Daily posting limits (3 free intents per identity)
 - Excess deposits required for additional posts
 - Forfeiture on proven spam
+
+### Security Apps Integration
+
+Optional integration with external security applications for enhanced protection:
+
+**Boundary Daemon** - Policy enforcement layer:
+```bash
+# Enable in .env
+BOUNDARY_DAEMON_ENABLED=true
+BOUNDARY_DAEMON_URL=http://localhost:9000
+BOUNDARY_DAEMON_TOKEN=your-token
+```
+
+**Boundary SIEM** - Security event management:
+```bash
+# Enable in .env
+BOUNDARY_SIEM_ENABLED=true
+BOUNDARY_SIEM_URL=http://localhost:8080
+BOUNDARY_SIEM_TOKEN=your-token
+```
+
+See [Security Hardening Guide](./docs/SECURITY_HARDENING.md) for complete security configuration.
 
 ## Governance
 
