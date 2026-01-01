@@ -374,14 +374,38 @@ export class MediatorNode {
       this.governanceManager.stop();
     }
 
-    // Stop WebSocket server if running
+    // Perform async cleanup operations in parallel with graceful error handling
+    const cleanupOperations: Promise<void>[] = [];
+
     if (this.webSocketServer) {
-      await this.webSocketServer.stop();
-      logger.info('WebSocket server stopped');
+      cleanupOperations.push(
+        this.webSocketServer.stop().then(() => {
+          logger.info('WebSocket server stopped');
+        })
+      );
     }
 
-    // Save vector database
-    await this.vectorDb.save();
+    cleanupOperations.push(
+      this.vectorDb.save().then(() => {
+        logger.debug('Vector database saved');
+      })
+    );
+
+    // Use Promise.allSettled for graceful shutdown - continue even if some fail
+    const results = await Promise.allSettled(cleanupOperations);
+
+    // Log any failures but don't throw - we want graceful shutdown
+    results.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const operationNames = ['WebSocket server stop', 'Vector database save'];
+        const opName = this.webSocketServer
+          ? operationNames[index]
+          : operationNames[index + 1];
+        logger.error(`Cleanup operation failed: ${opName}`, {
+          error: result.reason instanceof Error ? result.reason.message : 'Unknown error',
+        });
+      }
+    });
 
     logger.info('Mediator node stopped');
   }
@@ -610,45 +634,45 @@ export class MediatorNode {
           continue; // Already challenged
         }
 
-        // Fetch the original intents with individual error handling
-        let intentAResponse, intentBResponse;
-        try {
-          [intentAResponse, intentBResponse] = await Promise.all([
-            axios.get(
-              `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashA}`
-            ).catch(err => {
-              logger.warn('Failed to fetch intent A for settlement', {
-                settlementId: settlement.id,
-                intentHash: settlement.intentHashA,
-                error: err instanceof Error ? err.message : 'Unknown error',
-              });
-              return null;
-            }),
-            axios.get(
-              `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashB}`
-            ).catch(err => {
-              logger.warn('Failed to fetch intent B for settlement', {
-                settlementId: settlement.id,
-                intentHash: settlement.intentHashB,
-                error: err instanceof Error ? err.message : 'Unknown error',
-              });
-              return null;
-            }),
-          ]);
-        } catch (error) {
-          logger.error('Unexpected error fetching intents for settlement', {
+        // Fetch the original intents using Promise.allSettled for better error handling
+        const [intentAResult, intentBResult] = await Promise.allSettled([
+          axios.get(
+            `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashA}`
+          ),
+          axios.get(
+            `${this.config.chainEndpoint}/api/v1/intents/${settlement.intentHashB}`
+          ),
+        ]);
+
+        // Handle rejected promises with appropriate logging
+        if (intentAResult.status === 'rejected') {
+          logger.warn('Failed to fetch intent A for settlement', {
             settlementId: settlement.id,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            intentHash: settlement.intentHashA,
+            error: intentAResult.reason instanceof Error
+              ? intentAResult.reason.message
+              : 'Unknown error',
           });
           continue;
         }
 
-        if (!intentAResponse?.data || !intentBResponse?.data) {
+        if (intentBResult.status === 'rejected') {
+          logger.warn('Failed to fetch intent B for settlement', {
+            settlementId: settlement.id,
+            intentHash: settlement.intentHashB,
+            error: intentBResult.reason instanceof Error
+              ? intentBResult.reason.message
+              : 'Unknown error',
+          });
           continue;
         }
 
-        const intentA = intentAResponse.data;
-        const intentB = intentBResponse.data;
+        const intentA = intentAResult.value.data;
+        const intentB = intentBResult.value.data;
+
+        if (!intentA || !intentB) {
+          continue;
+        }
 
         // Analyze for contradictions
         const analysis = await this.challengeDetector.analyzeSettlement(
