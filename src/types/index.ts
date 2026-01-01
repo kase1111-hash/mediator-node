@@ -800,6 +800,8 @@ export interface MediatorConfig {
   requiredConsensus?: number; // Minimum consensus for approval (default: 3)
   semanticSimilarityThreshold?: number; // Cosine similarity threshold for equivalence (default: 0.85)
   participateInVerification?: boolean; // Opt-in to participate as verifier (default: true)
+  verifierSelectionTimeoutMs?: number; // Timeout for selecting verifiers (default: 10000)
+  chainRequestTimeoutMs?: number; // Timeout for chain API requests (default: 10000)
 
   // Sybil Resistance configuration
   enableSybilResistance?: boolean; // Enable daily limits and deposits (default: false)
