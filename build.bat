@@ -1,12 +1,17 @@
 @echo off
-title NatLangChain Mediator Node - Build
+REM ============================================================================
+REM NatLangChain Mediator Node - Build Script for Windows
+REM Version: 0.1.0-alpha
+REM ============================================================================
 
+echo.
 echo ========================================
-echo   NatLangChain Mediator Node Builder
+echo  NatLangChain Mediator Node Builder
+echo  Version 0.1.0-alpha
 echo ========================================
 echo.
 
-:: Check if Node.js is installed
+REM Check if Node.js is installed
 where node >nul 2>nul
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Node.js is not installed or not in PATH.
@@ -15,13 +20,21 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 
-:: Show Node.js version
-echo [INFO] Node.js version:
-node --version
-echo.
+REM Check Node.js version
+for /f "tokens=1" %%v in ('node -v') do set NODE_VERSION=%%v
+echo [INFO] Node.js version: %NODE_VERSION%
 
-:: Install dependencies
-echo [STEP 1/2] Installing dependencies...
+REM Check if npm is available
+where npm >nul 2>nul
+if %ERRORLEVEL% neq 0 (
+    echo [ERROR] npm is not installed or not in PATH.
+    pause
+    exit /b 1
+)
+
+echo.
+echo [STEP 1/4] Installing dependencies...
+echo ----------------------------------------
 call npm install
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Failed to install dependencies.
@@ -29,25 +42,52 @@ if %ERRORLEVEL% neq 0 (
     exit /b 1
 )
 echo [OK] Dependencies installed.
-echo.
 
-:: Build the project
-echo [STEP 2/2] Building project...
+echo.
+echo [STEP 2/4] Building TypeScript...
+echo ----------------------------------------
 call npm run build
 if %ERRORLEVEL% neq 0 (
     echo [ERROR] Build failed.
     pause
     exit /b 1
 )
-echo [OK] Build complete.
-echo.
+echo [OK] Build completed.
 
+echo.
+echo [STEP 3/4] Checking configuration...
+echo ----------------------------------------
+if not exist ".env" (
+    if exist ".env.example" (
+        echo [INFO] Creating .env from .env.example...
+        copy .env.example .env >nul
+        echo [WARN] Please edit .env with your API keys and settings.
+    ) else (
+        echo [WARN] No .env.example found. Run 'npm run init' to create config.
+    )
+) else (
+    echo [OK] Configuration file exists.
+)
+
+echo.
+echo [STEP 4/4] Verifying build...
+echo ----------------------------------------
+if exist "dist\cli.js" (
+    echo [OK] Build artifacts verified.
+) else (
+    echo [ERROR] Build artifacts not found.
+    pause
+    exit /b 1
+)
+
+echo.
 echo ========================================
-echo   Build successful!
+echo  BUILD SUCCESSFUL!
 echo ========================================
 echo.
 echo Next steps:
-echo   1. Copy .env.example to .env and configure
-echo   2. Run: npm start
+echo   1. Edit .env with your API keys
+echo   2. Run 'run.bat' to start the mediator
+echo   3. Or run 'npm run mock-chain' for testing
 echo.
 pause

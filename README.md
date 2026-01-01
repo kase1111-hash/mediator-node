@@ -61,6 +61,21 @@ The Mediator Node is a standalone service that:
 
 ## Quick Start
 
+### Windows (One-Click)
+
+```batch
+REM Build the project
+build.bat
+
+REM Run the mediator
+run.bat
+
+REM Or start mock chain for testing
+run.bat mock
+```
+
+### Docker Compose
+
 Get running in under 5 minutes with Docker Compose:
 
 ```bash
