@@ -18,3 +18,11 @@ export {
   burnToEntry,
   parseIntentsFromResponse,
 } from './transformers';
+
+// Re-export circuit breaker types for monitoring
+export {
+  CircuitBreaker,
+  CircuitBreakerStats,
+  CircuitOpenError,
+  CircuitState,
+} from '../utils/circuit-breaker';

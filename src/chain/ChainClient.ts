@@ -21,6 +21,7 @@ import axios, { AxiosInstance, AxiosError } from 'axios';
 import { Intent, ProposedSettlement, Challenge, MediatorConfig, BurnTransaction } from '../types';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';
+import { CircuitBreaker, CircuitBreakerStats, CircuitOpenError } from '../utils/circuit-breaker';
 import {
   NatLangChainEntry,
   NatLangChainContract,
@@ -64,11 +65,20 @@ export class ChainClient {
   private client: AxiosInstance;
   private retryAttempts: number;
   private retryDelay: number;
+  private circuitBreaker: CircuitBreaker;
 
   constructor(config: ChainClientConfig) {
     this.config = config;
     this.retryAttempts = config.retryAttempts || 3;
     this.retryDelay = config.retryDelay || 1000;
+
+    // Initialize circuit breaker for chain operations
+    this.circuitBreaker = new CircuitBreaker({
+      name: `chain-${new URL(config.chainEndpoint).host}`,
+      failureThreshold: 5,
+      resetTimeoutMs: 30000,
+      successThreshold: 2,
+    });
 
     this.client = axios.create({
       baseURL: config.chainEndpoint,
@@ -109,14 +119,39 @@ export class ChainClient {
   // ============================================================================
 
   /**
-   * Check chain health
+   * Check chain health (includes circuit breaker status)
    */
-  async checkHealth(): Promise<{ healthy: boolean; status?: any }> {
+  async checkHealth(): Promise<{
+    healthy: boolean;
+    status?: any;
+    circuitBreaker: CircuitBreakerStats;
+  }> {
+    const circuitBreaker = this.circuitBreaker.getStats();
+
+    // If circuit is open, report unhealthy without making request
+    if (circuitBreaker.state === 'open') {
+      return {
+        healthy: false,
+        status: { error: 'Circuit breaker open - chain unavailable' },
+        circuitBreaker,
+      };
+    }
+
     try {
       const response = await this.withRetry(() => this.client.get('/health'));
-      return { healthy: true, status: response.data };
-    } catch {
-      return { healthy: false };
+      return {
+        healthy: true,
+        status: response.data,
+        circuitBreaker: this.circuitBreaker.getStats(), // Get fresh stats after request
+      };
+    } catch (error) {
+      return {
+        healthy: false,
+        status: error instanceof CircuitOpenError
+          ? { error: 'Circuit breaker open' }
+          : { error: error instanceof Error ? error.message : 'Unknown error' },
+        circuitBreaker: this.circuitBreaker.getStats(),
+      };
     }
   }
 
@@ -696,27 +731,51 @@ export class ChainClient {
   // ============================================================================
 
   /**
-   * Retry a request with exponential backoff
+   * Retry a request with exponential backoff and circuit breaker protection
    */
   private async withRetry<T>(
     operation: () => Promise<T>,
     attempts: number = this.retryAttempts
   ): Promise<T> {
-    let lastError: Error | undefined;
+    // Use circuit breaker to wrap the entire retry logic
+    return this.circuitBreaker.execute(async () => {
+      let lastError: Error | undefined;
 
-    for (let i = 0; i < attempts; i++) {
-      try {
-        return await operation();
-      } catch (error) {
-        lastError = error as Error;
-        if (i < attempts - 1) {
-          const delay = this.retryDelay * Math.pow(2, i);
-          await new Promise(resolve => setTimeout(resolve, delay));
+      for (let i = 0; i < attempts; i++) {
+        try {
+          return await operation();
+        } catch (error) {
+          lastError = error as Error;
+          if (i < attempts - 1) {
+            const delay = this.retryDelay * Math.pow(2, i);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          }
         }
       }
-    }
 
-    throw lastError;
+      throw lastError;
+    });
+  }
+
+  /**
+   * Get circuit breaker statistics for monitoring
+   */
+  getCircuitBreakerStats(): CircuitBreakerStats {
+    return this.circuitBreaker.getStats();
+  }
+
+  /**
+   * Check if the chain client is available (circuit not open)
+   */
+  isAvailable(): boolean {
+    return this.circuitBreaker.isAvailable();
+  }
+
+  /**
+   * Manually reset the circuit breaker
+   */
+  resetCircuitBreaker(): void {
+    this.circuitBreaker.reset();
   }
 
   /**
