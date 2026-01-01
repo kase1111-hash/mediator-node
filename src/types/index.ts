@@ -915,6 +915,8 @@ export interface NegotiationResult {
   confidenceScore: number;
   modelUsed: string;
   promptHash: string;
+  /** Error message if negotiation failed due to an error (not just no alignment) */
+  error?: string;
 }
 
 /**

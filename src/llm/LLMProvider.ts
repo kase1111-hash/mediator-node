@@ -136,7 +136,13 @@ export class LLMProvider {
 
       return result;
     } catch (error) {
-      logger.error('Error during negotiation', { error });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Error during negotiation', {
+        error: errorMessage,
+        stack: error instanceof Error ? error.stack : undefined,
+        intentA: intentA.hash,
+        intentB: intentB.hash,
+      });
       return {
         success: false,
         reasoning: 'Negotiation failed due to error',
@@ -144,6 +150,7 @@ export class LLMProvider {
         confidenceScore: 0,
         modelUsed: this.config.llmModel,
         promptHash: '',
+        error: errorMessage, // Allow callers to distinguish errors from no-alignment
       };
     }
   }
@@ -217,8 +224,8 @@ Provide your analysis now:`,
    */
   private parseNegotiationResponse(
     response: string,
-    intentA: Intent,
-    intentB: Intent
+    _intentA: Intent,
+    _intentB: Intent
   ): NegotiationResult {
     try {
       // Extract key fields using regex
