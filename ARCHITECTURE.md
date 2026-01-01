@@ -17,29 +17,37 @@ The NatLangChain Mediator Node is built as a modular, event-driven system that i
 ### High-Level Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      MediatorNode                           │
-│                  (Main Orchestrator)                        │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-          ┌──────────┴──────────┐
-          │                     │
-    ┌─────▼─────┐         ┌────▼────┐
-    │ Alignment │         │Settlement│
-    │   Cycle   │         │ Monitor  │
-    └─────┬─────┘         └────┬─────┘
-          │                    │
-    ┌─────┴──────────────────┬─┴────────────────┐
-    │                        │                  │
-┌───▼────┐  ┌────▼────┐  ┌──▼──────┐  ┌───────▼────┐
-│Ingester│  │Vector DB│  │   LLM   │  │Settlement  │
-│        │  │         │  │Provider │  │  Manager   │
-└───┬────┘  └────┬────┘  └────┬────┘  └─────┬──────┘
-    │            │            │              │
-    │            │            │              │
-┌───▼────────────▼────────────▼──────────────▼──────┐
-│              Chain API Client                     │
-└───────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              MediatorNode                                   │
+│                          (Main Orchestrator)                                │
+└──────────────────────────────┬──────────────────────────────────────────────┘
+                               │
+        ┌──────────────────────┼──────────────────────┐
+        │                      │                      │
+  ┌─────▼─────┐         ┌──────▼──────┐        ┌─────▼──────┐
+  │ Alignment │         │  Settlement │        │  WebSocket │
+  │   Cycle   │         │   Monitor   │        │   Server   │
+  └─────┬─────┘         └──────┬──────┘        └─────┬──────┘
+        │                      │                     │
+   ┌────┴──────────────────────┼─────────────────────┼──────┐
+   │                           │                     │      │
+┌──▼─────┐ ┌──────────┐ ┌──────▼──────┐ ┌───────────▼┐ ┌───▼──────┐
+│Ingester│ │Vector DB │ │   LLM       │ │ Settlement │ │  Health  │
+│        │ │  (HNSW)  │ │  Provider   │ │  Manager   │ │  Server  │
+└───┬────┘ └────┬─────┘ └─────┬───────┘ └─────┬──────┘ └──────────┘
+    │           │             │               │
+    │    ┌──────┴─────────────┼───────────────┤
+    │    │                    │               │
+┌───▼────▼────────────────────▼───────────────▼───────────────────┐
+│                        Chain API Client                         │
+└─────────────────────────────────────────────────────────────────┘
+        │
+┌───────┴───────────────────────────────────────────────────────┐
+│                     Protocol Extension Managers               │
+├───────────────┬───────────────┬───────────────┬──────────────┤
+│ BurnManager   │ DisputeManager│ EffortCapture │ Licensing    │
+│ (MP-06)       │ (MP-03)       │ (MP-02)       │ (MP-04)      │
+└───────────────┴───────────────┴───────────────┴──────────────┘
 ```
 
 ## Component Details
@@ -468,17 +476,142 @@ Implement API client for:
 
 Replace axios calls in respective managers.
 
+### 10. WebSocketServer
+
+**Responsibility**: Real-time event streaming to connected clients
+
+**Key Operations**:
+- Accept authenticated WebSocket connections
+- Publish events for intents, settlements, disputes, receipts
+- Support topic-based subscriptions with filters
+- Maintain heartbeat for connection health
+
+**Configuration**:
+- `port`: WebSocket server port (default: 9000)
+- `authRequired`: Require authentication (default: true)
+- `authTimeout`: Authentication timeout (default: 30s)
+- `maxConnections`: Connection limit (default: 1000)
+
+### 11. HealthServer
+
+**Responsibility**: Provide HTTP health endpoints for monitoring
+
+**Endpoints**:
+- `/health`: Full health report with component status
+- `/health/live`: Kubernetes liveness probe
+- `/health/ready`: Kubernetes readiness probe
+
+**Health Components Monitored**:
+- Vector database status and latency
+- Chain client connectivity
+- LLM provider availability
+- Memory and CPU usage
+
+### 12. BurnManager (MP-06)
+
+**Responsibility**: Token burn economics and behavioral pressure
+
+**Key Operations**:
+- Calculate filing burn amounts
+- Track daily free submission allowances
+- Apply exponential burn escalation
+- Integrate with LoadMonitor for load-scaled pricing
+- Record success burns on closure
+
+**Burn Formula**:
+```
+Burn = BaseBurn × EscalationMultiplier × LoadMultiplier
+EscalationMultiplier = base^(dailySubmissions - freeLimit)
+```
+
+### 13. DisputeManager (MP-03)
+
+**Responsibility**: Settlement dispute lifecycle management
+
+**Components**:
+- `ClarificationManager`: Request/receive clarifications
+- `EvidenceManager`: Evidence submission and freezing
+- `EscalationManager`: Escalation to human review
+- `OutcomeRecorder`: Record dispute resolutions
+
+**Dispute Lifecycle**:
+```
+Initiated → Clarifying → Under Review → [Resolved | Dismissed | Escalated]
+```
+
+### 14. EffortCaptureSystem (MP-02)
+
+**Responsibility**: Track and anchor proof-of-effort receipts
+
+**Observers**:
+- `CommandObserver`: Terminal command tracking
+- `SignalObserver`: System signal detection
+- `TextEditObserver`: Editor activity monitoring
+
+**Key Operations**:
+- Capture effort signals in real-time
+- Segment effort into temporal windows
+- Generate cryptographic receipts
+- Anchor receipts to blockchain
+
+### 15. LicensingManager (MP-04)
+
+**Responsibility**: License and delegation management
+
+**Key Operations**:
+- Create and ratify licenses
+- Track license expiry and scope
+- Manage delegations
+- Detect scope violations
+- Handle license revocation
+
+### 16. GovernanceManager
+
+**Responsibility**: Stake-weighted governance voting
+
+**Key Operations**:
+- Submit governance proposals
+- Tally stake-weighted votes
+- Execute approved proposals
+- Track proposal lifecycle
+
+**Proposal Lifecycle**: 7-day voting → quorum check → approval → 3-day delay → execution
+
+### 17. SemanticConsensusManager
+
+**Responsibility**: Multi-mediator verification for high-value settlements
+
+**Key Operations**:
+- Identify settlements above value threshold
+- Select random verifier mediators
+- Collect independent verification votes
+- Require consensus percentage for closure
+
+### 18. ChallengeManager
+
+**Responsibility**: Settlement challenge submission and tracking
+
+**Key Operations**:
+- Submit challenges with evidence
+- Track challenge status
+- Record challenge outcomes
+- Update reputation based on results
+
+### 19. SecurityTestRunner
+
+**Responsibility**: Automated security vulnerability scanning
+
+**Key Operations**:
+- Run vulnerability scans against components
+- Generate security reports
+- Track security test history
+- Alert on critical findings
+
 ## Future Enhancements
 
-### Planned
-- Multi-chain orchestration
-- Challenge submission capability
-- Semantic consensus participation
-- Governance proposal automation
-- Advanced embedding models (fine-tuned)
-
 ### Under Consideration
-- WebSocket support for real-time updates
-- Distributed mediator coordination
 - Machine learning for candidate prioritization
-- Intent clustering for batch mediation
+- Advanced embedding models (fine-tuned for intents)
+- Distributed mediator coordination for high availability
+- Intent clustering for batch mediation optimization
+- Cross-chain intent bridging
