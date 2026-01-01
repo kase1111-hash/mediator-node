@@ -1100,7 +1100,8 @@ export type VerificationStatus =
   | 'consensus_reached' // 3+ semantically equivalent summaries
   | 'consensus_failed'  // Failed to reach consensus
   | 'timeout'           // Verification deadline passed
-  | 'not_required';     // Settlement below threshold
+  | 'not_required'      // Settlement below threshold
+  | 'skipped';          // Verification required but initiation failed
 
 /**
  * Request for semantic verification from selected mediators.

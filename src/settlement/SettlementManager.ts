@@ -139,7 +139,12 @@ export class SettlementManager {
               settlementId: settlement.id,
             });
             // Don't fail the settlement submission if verification initiation fails
-            settlement.verificationStatus = 'not_required';
+            // Mark as skipped so callers can distinguish from truly not required
+            settlement.verificationStatus = 'skipped';
+            logger.warn('Settlement proceeding without required verification', {
+              settlementId: settlement.id,
+              reason: error instanceof Error ? error.message : 'Unknown error',
+            });
           }
         }
 

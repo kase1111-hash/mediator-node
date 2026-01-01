@@ -39,12 +39,17 @@ export class IntentIngester {
       }
     }, intervalMs);
 
-    // Initial poll with error handling
-    this.pollForIntents().catch(error => {
-      logger.error('Error in initial intent poll', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    });
+    // Initial poll with error handling (using same pattern as interval)
+    (async () => {
+      try {
+        await this.pollForIntents();
+      } catch (error) {
+        logger.error('Error in initial intent poll', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+        });
+      }
+    })();
   }
 
   /**
