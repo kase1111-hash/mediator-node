@@ -879,6 +879,20 @@ export interface MediatorConfig {
   ncipHoverTipsShowRelated?: boolean; // Show related concepts (default: true)
   ncipHoverTipsDelayMs?: number; // Delay before showing tooltip in ms (default: 300)
 
+  // Security Apps Integration configuration
+  // @see https://github.com/kase1111-hash/Boundary-SIEM
+  // @see https://github.com/kase1111-hash/boundary-daemon-
+  enableSecurityApps?: boolean; // Enable Boundary SIEM and Daemon integration (default: false)
+  boundaryDaemonUrl?: string; // Boundary Daemon API URL (default: 'http://localhost:9000')
+  boundaryDaemonToken?: string; // Authentication token for Boundary Daemon
+  boundaryDaemonFailOpen?: boolean; // Allow operations if daemon unavailable (default: false)
+  boundarySIEMUrl?: string; // Boundary SIEM API URL (default: 'http://localhost:8080')
+  boundarySIEMToken?: string; // Authentication token for Boundary SIEM
+  securityEventBatchSize?: number; // SIEM event batch size (default: 100)
+  securityEventFlushInterval?: number; // SIEM batch flush interval in ms (default: 5000)
+  protectWebSocketConnections?: boolean; // Use Boundary Daemon for WebSocket auth (default: true)
+  protectChainConnections?: boolean; // Use Boundary Daemon for chain connection auth (default: true)
+
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 

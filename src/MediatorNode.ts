@@ -25,6 +25,8 @@ import { HealthMonitor } from './monitoring/HealthMonitor';
 import { PerformanceAnalytics } from './monitoring/PerformanceAnalytics';
 import { MonitoringPublisher } from './monitoring/MonitoringPublisher';
 import { GovernanceManager } from './governance/GovernanceManager';
+import { SecurityAppsManager } from './security/SecurityAppsManager';
+import { ErrorHandler, initializeErrorHandler } from './security/ErrorHandler';
 import { logger } from './utils/logger';
 
 /**
@@ -62,6 +64,8 @@ export class MediatorNode {
   private performanceAnalytics?: PerformanceAnalytics;
   private monitoringPublisher?: MonitoringPublisher;
   private governanceManager?: GovernanceManager;
+  private securityAppsManager?: SecurityAppsManager;
+  private errorHandler?: ErrorHandler;
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
@@ -166,6 +170,33 @@ export class MediatorNode {
       this.governanceManager = new GovernanceManager(config, this.stakeManager);
     }
 
+    // Initialize Security Apps integration (Boundary SIEM + Daemon)
+    if (config.enableSecurityApps) {
+      this.securityAppsManager = new SecurityAppsManager({
+        enabled: true,
+        boundaryDaemon: {
+          enabled: true,
+          baseUrl: config.boundaryDaemonUrl || 'http://localhost:9000',
+          apiToken: config.boundaryDaemonToken,
+          failOpen: config.boundaryDaemonFailOpen ?? false,
+          timeout: 5000,
+          retryAttempts: 3,
+        },
+        boundarySIEM: {
+          enabled: true,
+          baseUrl: config.boundarySIEMUrl || 'http://localhost:8080',
+          apiToken: config.boundarySIEMToken,
+          batchEnabled: true,
+          batchSize: config.securityEventBatchSize || 100,
+          batchFlushInterval: config.securityEventFlushInterval || 5000,
+          timeout: 10000,
+          retryAttempts: 3,
+          sourceId: `mediator-${config.mediatorPublicKey.slice(0, 8)}`,
+        },
+      });
+      this.errorHandler = initializeErrorHandler(this.securityAppsManager);
+    }
+
     // Initialize Validator Rotation system for DPoS mode
     if (config.consensusMode === 'dpos' || config.consensusMode === 'hybrid') {
       this.validatorRotationManager = new ValidatorRotationManager(config);
@@ -182,6 +213,7 @@ export class MediatorNode {
       licensingSystemEnabled: config.enableLicensingSystem || false,
       settlementSystemEnabled: config.enableSettlementSystem || false,
       webSocketEnabled: config.enableWebSocket || false,
+      securityAppsEnabled: config.enableSecurityApps || false,
     });
   }
 
@@ -313,6 +345,49 @@ export class MediatorNode {
         });
       }
 
+      // Initialize Security Apps (Boundary SIEM + Daemon)
+      if (this.securityAppsManager) {
+        await this.securityAppsManager.initialize();
+        logger.info('Security apps initialized', {
+          siemConnected: this.securityAppsManager.getSIEMClient()?.isConnected() ?? false,
+          daemonConnected: this.securityAppsManager.getDaemonClient()?.isConnected() ?? false,
+        });
+
+        // Wire up WebSocket connection protection if enabled
+        if (this.webSocketServer && this.config.protectWebSocketConnections !== false) {
+          this.webSocketServer.setSecurityAppsManager(this.securityAppsManager);
+          logger.info('WebSocket connection protection enabled via Boundary Daemon');
+        }
+
+        // Report node start to SIEM
+        await this.securityAppsManager.logBlockchainEvent(
+          'mediator_node_start',
+          'start',
+          'success',
+          {
+            actor: this.config.mediatorPublicKey,
+            severity: 2,
+          }
+        );
+
+        // Register security health checkers
+        if (this.healthMonitor) {
+          this.healthMonitor.registerComponent('security-apps', async () => {
+            const health = await this.securityAppsManager!.getHealth();
+            return {
+              name: 'security-apps',
+              status: health.overall ? 'healthy' : 'degraded',
+              lastCheck: Date.now(),
+              details: {
+                siemHealthy: health.boundarySIEM.healthy,
+                daemonHealthy: health.boundaryDaemon.healthy,
+                daemonMode: health.boundaryDaemon.mode,
+              },
+            };
+          });
+        }
+      }
+
       logger.info('Mediator node started successfully', {
         reputation: this.reputationTracker.getWeight(),
         effectiveStake: this.stakeManager.getEffectiveStake(),
@@ -323,6 +398,7 @@ export class MediatorNode {
         spamProofSubmission: this.config.enableSpamProofSubmission || false,
         effortCapture: this.config.enableEffortCapture || false,
         disputeSystem: this.config.enableDisputeSystem || false,
+        securityApps: this.config.enableSecurityApps || false,
       });
     } catch (error) {
       logger.error('Error starting mediator node', { error });
@@ -374,6 +450,23 @@ export class MediatorNode {
       this.governanceManager.stop();
     }
 
+    // Log node stop to SIEM before shutdown
+    if (this.securityAppsManager) {
+      try {
+        await this.securityAppsManager.logBlockchainEvent(
+          'mediator_node_stop',
+          'stop',
+          'success',
+          {
+            actor: this.config.mediatorPublicKey,
+            severity: 2,
+          }
+        );
+      } catch {
+        // Ignore SIEM reporting errors during shutdown
+      }
+    }
+
     // Perform async cleanup operations in parallel with graceful error handling
     const cleanupOperations: Promise<void>[] = [];
 
@@ -391,16 +484,27 @@ export class MediatorNode {
       })
     );
 
+    // Shutdown security apps
+    if (this.securityAppsManager) {
+      cleanupOperations.push(
+        this.securityAppsManager.shutdown().then(() => {
+          logger.debug('Security apps shutdown complete');
+        })
+      );
+    }
+
     // Use Promise.allSettled for graceful shutdown - continue even if some fail
     const results = await Promise.allSettled(cleanupOperations);
 
     // Log any failures but don't throw - we want graceful shutdown
+    const operationNames: string[] = [];
+    if (this.webSocketServer) operationNames.push('WebSocket server stop');
+    operationNames.push('Vector database save');
+    if (this.securityAppsManager) operationNames.push('Security apps shutdown');
+
     results.forEach((result, index) => {
       if (result.status === 'rejected') {
-        const operationNames = ['WebSocket server stop', 'Vector database save'];
-        const opName = this.webSocketServer
-          ? operationNames[index]
-          : operationNames[index + 1];
+        const opName = operationNames[index] || 'Unknown operation';
         logger.error(`Cleanup operation failed: ${opName}`, {
           error: result.reason instanceof Error ? result.reason.message : 'Unknown error',
         });
@@ -1398,5 +1502,19 @@ export class MediatorNode {
    */
   public getGovernanceManager(): GovernanceManager | undefined {
     return this.governanceManager;
+  }
+
+  /**
+   * Get SecurityAppsManager instance for direct access
+   */
+  public getSecurityAppsManager(): SecurityAppsManager | undefined {
+    return this.securityAppsManager;
+  }
+
+  /**
+   * Get ErrorHandler instance for direct access
+   */
+  public getErrorHandler(): ErrorHandler | undefined {
+    return this.errorHandler;
   }
 }
