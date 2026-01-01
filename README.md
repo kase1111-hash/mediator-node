@@ -27,12 +27,27 @@ The Mediator Node is a standalone service that:
 - **Hybrid**: Configurable combinations (e.g., PoA + DPoS)
 
 ### Advanced Features
-- Receipt-based reputation system
+- Receipt-based reputation system (MP-01)
 - Stake and delegation management
 - Challenge window for contradiction proofs
-- Semantic consensus verification
-- Governance proposal handling
-- Multi-chain support
+- Semantic consensus verification for high-value settlements
+- Governance proposal handling with stake-weighted voting
+- Multi-chain orchestration support
+
+### Protocol Extensions (Fully Implemented)
+- **MP-02**: Proof-of-Effort Receipt Protocol - Temporal effort tracking
+- **MP-03**: Dispute & Escalation System - Clarification, evidence, and escalation
+- **MP-04**: Licensing & Delegation Protocol - License management and delegation
+- **MP-05**: Settlement & Capitalization Protocol - Settlement coordination
+- **MP-06**: Behavioral Pressure & Anti-Entropy Controls - Token burn economics
+
+### Infrastructure
+- Real-time WebSocket event streaming
+- Health monitoring with Kubernetes-compatible probes
+- Automated security vulnerability scanning
+- Performance benchmarking and analytics
+- Log rotation with daily archive
+- CI/CD with GitHub Actions
 
 ## Quick Start
 
@@ -234,7 +249,7 @@ Facilitation fees are earned when:
 
 **Fee distribution:**
 - **Permissionless**: 100% to mediator
-- **DPoS**: 80-90% to mediator, 10-20% distributed to delegators
+- **DPoS**: 80–90% to mediator, 10–20% distributed to delegators
 - **PoA**: Configurable per chain governance
 
 ## Development
@@ -249,34 +264,88 @@ mediator-node/
 │   ├── ingestion/          # Intent monitoring
 │   ├── mapping/            # Vector database & semantic search
 │   ├── llm/                # LLM provider integration
-│   ├── settlement/         # Settlement creation & submission
+│   ├── settlement/         # Settlement creation & MP-05 coordination
 │   ├── reputation/         # Reputation tracking
-│   ├── consensus/          # DPoS & PoA management
-│   ├── utils/              # Crypto, logging utilities
-│   ├── MediatorNode.ts     # Main orchestrator
+│   ├── consensus/          # DPoS, PoA, semantic consensus, validator rotation
+│   ├── challenge/          # Challenge detection & management
+│   ├── dispute/            # MP-03 dispute system (clarification, evidence, escalation)
+│   ├── effort/             # MP-02 proof-of-effort (observers, receipts, anchoring)
+│   ├── burn/               # MP-06 behavioral pressure (burn economics, load scaling)
+│   ├── licensing/          # MP-04 licensing & delegation
+│   ├── governance/         # Stake-weighted governance voting
+│   ├── sybil/              # Sybil resistance (spam detection, submission tracking)
+│   ├── websocket/          # Real-time WebSocket server & events
+│   ├── monitoring/         # Health server & performance analytics
+│   ├── security/           # Automated vulnerability scanning & testing
+│   ├── network/            # Multi-chain orchestration
+│   ├── chain/              # NatLangChain API client
+│   ├── validation/         # Input validation schemas
+│   ├── utils/              # Crypto, logging, circuit breaker, timeouts
+│   ├── MediatorNode.ts     # Main orchestrator (1,350+ lines)
 │   ├── cli.ts              # CLI interface
 │   └── index.ts            # Library exports
-├── spec.md                 # Protocol specification
-├── docs/                   # Extended protocol specs (MP-02 through MP-06)
+├── test/                   # Comprehensive test suite (200+ unit, 30+ integration)
+├── docs/                   # Protocol specs (MP-02 through MP-06, NCIP-000 through NCIP-015)
+├── benchmark/              # Performance benchmarking
+├── examples/mock-chain/    # Mock blockchain for testing
+├── spec.md                 # Protocol specification (MP-01)
 └── package.json
 ```
 
 ### Key Components
 
+**Core Mediation**
+- **MediatorNode**: Main orchestrator coordinating alignment cycles
 - **IntentIngester**: Polls chain, validates intents, maintains cache
 - **VectorDatabase**: HNSW index for semantic similarity search
-- **LLMProvider**: Anthropic/OpenAI integration for negotiation
+- **LLMProvider**: Anthropic/OpenAI integration for negotiation and embeddings
 - **SettlementManager**: Creates and monitors proposed settlements
-- **ReputationTracker**: Tracks mediator metrics
+
+**Consensus & Governance**
 - **StakeManager**: DPoS stake and delegation handling
 - **AuthorityManager**: PoA authority set management
-- **MediatorNode**: Orchestrates the alignment cycle
+- **ValidatorRotationManager**: DPoS slot-based validator rotation
+- **SemanticConsensusManager**: High-value settlement multi-mediator verification
+- **GovernanceManager**: Stake-weighted governance voting
+
+**Protocol Extensions**
+- **ReputationTracker**: Receipt-based reputation system (MP-01)
+- **EffortCaptureSystem**: Proof-of-effort tracking (MP-02)
+- **DisputeManager**: Dispute resolution and escalation (MP-03)
+- **LicensingManager**: License and delegation handling (MP-04)
+- **MP05SettlementCoordinator**: Settlement coordination (MP-05)
+- **BurnManager**: Token burn economics and load scaling (MP-06)
+
+**Infrastructure**
+- **WebSocketServer**: Real-time event streaming
+- **HealthServer**: HTTP health endpoints with Kubernetes probes
+- **ChainClient**: NatLangChain API abstraction layer
+- **ChallengeManager**: Settlement challenge handling
+- **SecurityTestRunner**: Automated vulnerability scanning
 
 ## Testing
 
 ```bash
+# Run all tests
 npm test
+
+# Run specific test file
+npm test -- unit/consensus/ValidatorRotationManager.test.ts
+
+# Run with coverage
+npm test -- --coverage
+
+# Run linting
+npm run lint
+
+# Run benchmarks
+npm run benchmark
 ```
+
+Test coverage includes:
+- 200+ unit tests (consensus, security, challenge, sybil, etc.)
+- 30+ integration tests (settlement lifecycle, burn analytics, etc.)
+- End-to-end simulation tests
 
 ## Integration with Other Repositories
 
@@ -378,10 +447,26 @@ MIT License - see [LICENSE](./LICENSE)
 
 ## Documentation
 
+### Core Documentation
 - [Protocol Specification](./spec.md) - MP-01 mediator protocol
 - [Architecture Guide](./ARCHITECTURE.md) - System design deep dive
 - [Integration Guide](./INTEGRATION.md) - API details and multi-chain setup
 - [API Reference](./docs/API.md) - Complete HTTP and WebSocket API
+- [Operations Runbook](./docs/OPERATIONS.md) - Production deployment guide
+- [Security Hardening](./docs/SECURITY_HARDENING.md) - Security audit and hardening
+
+### Protocol Extensions
+- [MP-02: Proof-of-Effort](./docs/MP-02-spec.md) - Temporal effort tracking
+- [MP-03: Disputes](./docs/MP-03-spec.md) - Dispute resolution and escalation
+- [MP-04: Licensing](./docs/MP-04-spec.md) - Licensing and delegation
+- [MP-05: Settlement](./docs/MP-05-spec.md) - Settlement coordination
+- [MP-06: Burn Economics](./docs/MP-06-spec.md) - Behavioral pressure controls
+
+### Governance & Community
+- [NCIP Specifications](./docs/NCIP-000.md) - Semantic governance (16 documents)
+- [Contributing Guide](./CONTRIBUTING.md) - How to contribute
+- [Code of Conduct](./CODE_OF_CONDUCT.md) - Community standards
+- [FAQ](./FAQ.md) - Common questions and answers
 
 ## Support
 

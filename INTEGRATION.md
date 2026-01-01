@@ -170,6 +170,168 @@ The mediator node expects the following REST API endpoints on your NatLangChain 
 ```
 - Response: `201 Created` with proposal ID
 
+#### Challenge Management
+
+**POST /api/v1/challenges**
+- Body:
+```json
+{
+  "settlementId": "settlement_xyz",
+  "challengerId": "challenger_pubkey",
+  "reason": "Constraint violation",
+  "evidence": {
+    "type": "constraint_violation",
+    "details": "..."
+  },
+  "timestamp": 1703001234567
+}
+```
+- Response: `201 Created` with challenge ID
+
+**GET /api/v1/challenges/:challengeId**
+- Response:
+```json
+{
+  "id": "challenge_abc",
+  "settlementId": "settlement_xyz",
+  "challengerId": "challenger_pubkey",
+  "status": "pending" | "upheld" | "rejected",
+  "timestamp": 1703001234567
+}
+```
+
+#### Burn Transactions (MP-06)
+
+**POST /api/v1/burn**
+- Body:
+```json
+{
+  "type": "intent_filing" | "success_burn",
+  "author": "user_pubkey",
+  "amount": 50,
+  "intentHash": "intent_hash",
+  "multiplier": 1.5,
+  "timestamp": 1703001234567
+}
+```
+- Response: `200 OK` with transaction ID
+
+**GET /api/v1/burn/stats/:userId**
+- Response:
+```json
+{
+  "userId": "user_pubkey",
+  "dailySubmissions": 3,
+  "totalBurned": 150,
+  "freeRemaining": 0
+}
+```
+
+#### Dispute Management (MP-03)
+
+**POST /api/v1/disputes**
+- Body:
+```json
+{
+  "settlementId": "settlement_xyz",
+  "initiatorId": "user_pubkey",
+  "reason": "Settlement terms not honored",
+  "evidence": [],
+  "timestamp": 1703001234567
+}
+```
+- Response: `201 Created` with dispute ID
+
+**GET /api/v1/disputes/:disputeId**
+- Response:
+```json
+{
+  "id": "dispute_abc",
+  "settlementId": "settlement_xyz",
+  "status": "initiated" | "clarifying" | "under_review" | "escalated" | "resolved" | "dismissed",
+  "initiatorId": "user_pubkey",
+  "evidence": [],
+  "clarifications": [],
+  "outcome": null
+}
+```
+
+#### Receipt Management (MP-02)
+
+**POST /api/v1/receipts**
+- Body:
+```json
+{
+  "type": "effort_receipt",
+  "author": "user_pubkey",
+  "segments": [],
+  "hash": "receipt_hash",
+  "signature": "signature",
+  "timestamp": 1703001234567
+}
+```
+- Response: `201 Created` with receipt ID
+
+**GET /api/v1/receipts/:receiptId**
+- Response:
+```json
+{
+  "id": "receipt_abc",
+  "author": "user_pubkey",
+  "status": "created" | "validated" | "anchored",
+  "segments": [],
+  "anchorHash": "blockchain_anchor"
+}
+```
+
+## WebSocket Integration
+
+The mediator node provides real-time event streaming via WebSocket.
+
+### Connection
+
+```javascript
+const ws = new WebSocket('ws://localhost:9000');
+
+// Authenticate (if required)
+ws.send(JSON.stringify({
+  action: 'authenticate',
+  identity: 'your-public-key',
+  timestamp: Date.now(),
+  signature: 'signature-of-timestamp',
+  nonce: 'unique-nonce'
+}));
+
+// Subscribe to events
+ws.send(JSON.stringify({
+  action: 'subscribe',
+  topics: ['settlement.proposed', 'settlement.accepted', 'challenge.submitted'],
+  filters: {
+    parties: ['your-public-key']
+  }
+}));
+
+// Handle events
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  console.log('Event:', message.type, message.payload);
+};
+```
+
+### Available Event Topics
+
+| Category | Events |
+|----------|--------|
+| Intent | `intent.submitted`, `intent.accepted`, `intent.rejected`, `intent.closed` |
+| Settlement | `settlement.proposed`, `settlement.accepted`, `settlement.challenged`, `settlement.closed` |
+| Challenge | `challenge.submitted`, `challenge.upheld`, `challenge.rejected` |
+| Dispute (MP-03) | `dispute.initiated`, `dispute.clarifying`, `dispute.resolved`, `dispute.escalated` |
+| Receipt (MP-02) | `receipt.created`, `receipt.validated`, `receipt.anchored` |
+| Burn (MP-06) | `burn.executed`, `burn.escalated`, `burn.load_scaled` |
+| System | `system.node_status_changed`, `system.health_update` |
+
+See [docs/API.md](./docs/API.md) for complete WebSocket documentation.
+
 ## Multi-Chain Setup
 
 To connect to multiple chains, you can run multiple mediator instances with different configurations:
