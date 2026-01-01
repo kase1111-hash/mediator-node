@@ -487,7 +487,7 @@ Replace axios calls in respective managers.
 - Maintain heartbeat for connection health
 
 **Configuration**:
-- `port`: WebSocket server port (default: 9000)
+- `port`: WebSocket server port (default: 8080)
 - `authRequired`: Require authentication (default: true)
 - `authTimeout`: Authentication timeout (default: 30s)
 - `maxConnections`: Connection limit (default: 1000)
