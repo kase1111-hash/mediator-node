@@ -12,6 +12,26 @@ import { logger } from '../utils/logger';
 import { safeParseAndValidate, sanitizeFilename, validatePathWithinDirectory } from './schemas';
 
 /**
+ * Custom error for path traversal attempts
+ */
+export class PathTraversalError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PathTraversalError';
+  }
+}
+
+/**
+ * Custom error for validation failures
+ */
+export class ValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ValidationError';
+  }
+}
+
+/**
  * Options for safe file operations
  */
 export interface SafeFileOptions {
@@ -49,12 +69,12 @@ export function readJSONFile<T>(
 
   // Validate path is within allowed directory
   if (!validatePathWithinDirectory(filePath, baseDir)) {
-    throw new Error(`Path traversal detected: ${filePath} is outside ${baseDir}`);
+    throw new PathTraversalError(`Path traversal detected: ${filePath} is outside ${baseDir}`);
   }
 
   // Check file exists
   if (!fs.existsSync(filePath)) {
-    throw new Error(`File not found: ${filePath}`);
+    throw new ValidationError(`File not found: ${filePath}`);
   }
 
   try {
@@ -68,7 +88,7 @@ export function readJSONFile<T>(
         filePath,
         error: result.error,
       });
-      throw new Error(`Validation failed for ${filePath}: ${result.error}`);
+      throw new ValidationError(`Validation failed for ${filePath}: ${result.error}`);
     }
 
     logger.debug('Successfully read and validated file', {
@@ -105,7 +125,7 @@ export function writeJSONFile<T>(
 
   // Validate path is within allowed directory
   if (!validatePathWithinDirectory(filePath, baseDir)) {
-    throw new Error(`Path traversal detected: ${filePath} is outside ${baseDir}`);
+    throw new PathTraversalError(`Path traversal detected: ${filePath} is outside ${baseDir}`);
   }
 
   try {
@@ -145,7 +165,7 @@ export function writeJSONFile<T>(
 export function listFiles(dirPath: string, baseDir: string): string[] {
   // Validate path is within allowed directory
   if (!validatePathWithinDirectory(dirPath, baseDir)) {
-    throw new Error(`Path traversal detected: ${dirPath} is outside ${baseDir}`);
+    throw new PathTraversalError(`Path traversal detected: ${dirPath} is outside ${baseDir}`);
   }
 
   if (!fs.existsSync(dirPath)) {
@@ -176,7 +196,7 @@ export function listFiles(dirPath: string, baseDir: string): string[] {
 export function deleteFile(filePath: string, baseDir: string): void {
   // Validate path is within allowed directory
   if (!validatePathWithinDirectory(filePath, baseDir)) {
-    throw new Error(`Path traversal detected: ${filePath} is outside ${baseDir}`);
+    throw new PathTraversalError(`Path traversal detected: ${filePath} is outside ${baseDir}`);
   }
 
   if (fs.existsSync(filePath)) {
@@ -211,7 +231,7 @@ export function buildSafeFilePath(
 
   // Double-check path is safe
   if (!validatePathWithinDirectory(filePath, baseDir)) {
-    throw new Error(`Generated unsafe path: ${filePath}`);
+    throw new PathTraversalError(`Generated unsafe path: ${filePath}`);
   }
 
   return filePath;
@@ -253,21 +273,4 @@ export function readAllJSONFiles<T>(
   }
 
   return results;
-}
-
-/**
- * Safe file operation error types
- */
-export class PathTraversalError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'PathTraversalError';
-  }
-}
-
-export class ValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ValidationError';
-  }
 }

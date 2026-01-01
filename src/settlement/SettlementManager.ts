@@ -195,8 +195,17 @@ export class SettlementManager {
 
         // Check if both accepted
         if (settlement.partyAAccepted && settlement.partyBAccepted) {
-          await this.closeSettlement(settlement);
-          this.activeSettlements.delete(id);
+          try {
+            await this.closeSettlement(settlement);
+            // Only delete from tracking after successful closure
+            this.activeSettlements.delete(id);
+          } catch (closeError) {
+            // Keep settlement in tracking if closure fails to allow retry
+            logger.error('Failed to close settlement, will retry', {
+              error: closeError,
+              settlementId: id,
+            });
+          }
         }
       } catch (error) {
         logger.error('Error monitoring settlement', { error, settlementId: id });

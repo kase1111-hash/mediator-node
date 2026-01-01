@@ -30,7 +30,6 @@ import {
   settlementToContractProposal,
   challengeToEntry,
   burnToEntry,
-  parseIntentsFromResponse,
   contractToSettlement,
 } from './transformers';
 
@@ -114,9 +113,9 @@ export class ChainClient {
    */
   async checkHealth(): Promise<{ healthy: boolean; status?: any }> {
     try {
-      const response = await this.client.get('/health');
+      const response = await this.withRetry(() => this.client.get('/health'));
       return { healthy: true, status: response.data };
-    } catch (error) {
+    } catch {
       return { healthy: false };
     }
   }
@@ -125,7 +124,7 @@ export class ChainClient {
    * Get chain statistics
    */
   async getStats(): Promise<any> {
-    const response = await this.client.get('/stats');
+    const response = await this.withRetry(() => this.client.get('/stats'));
     return response.data;
   }
 
@@ -148,7 +147,7 @@ export class ChainClient {
             ? pendingResponse.data
             : pendingResponse.data.entries || [];
         }
-      } catch (pendingError) {
+      } catch {
         // Fall back to search
         logger.debug('Falling back to /entries/search for pending intents');
       }
@@ -170,7 +169,7 @@ export class ChainClient {
               : searchResponse.data.entries || searchResponse.data.results || [];
             entries = [...entries, ...searchEntries];
           }
-        } catch (searchError) {
+        } catch {
           logger.debug('Search endpoint not available');
         }
       }
@@ -339,19 +338,21 @@ export class ChainClient {
         if (response.status === 200 || response.status === 201) {
           return { success: true };
         }
-      } catch (proposeError) {
+      } catch {
         logger.debug('Contract propose endpoint not available, using /entry');
       }
 
-      // Fall back to submitting as an entry
+      // Fall back to submitting as an entry with retry logic
       const entry = settlementToEntry(settlement, this.config.mediatorPublicKey);
       const signature = generateSignature(entry.content, this.config.mediatorPrivateKey);
 
-      const response = await this.client.post('/entry', {
-        ...entry,
-        signature,
-        validate: true,
-      });
+      const response = await this.withRetry(() =>
+        this.client.post('/entry', {
+          ...entry,
+          signature,
+          validate: true,
+        })
+      );
 
       if (response.status === 200 || response.status === 201) {
         return { success: true };
@@ -454,27 +455,29 @@ export class ChainClient {
         if (response.status === 200 || response.status === 201) {
           return { success: true };
         }
-      } catch (payoutError) {
+      } catch {
         logger.debug('Contract payout endpoint not available, using /entry');
       }
 
-      // Fall back to entry
+      // Fall back to entry with retry logic
       const content = `[PAYOUT] Settlement ${settlementId} closed. Claiming fee: ${amount} NLC`;
       const signature = generateSignature(content, this.config.mediatorPrivateKey);
 
-      const response = await this.client.post('/entry', {
-        content,
-        author: this.config.mediatorPublicKey,
-        intent: 'payout_claim',
-        metadata: {
-          settlement_id: settlementId,
-          mediator_id: this.config.mediatorPublicKey,
-          amount,
-          timestamp: Date.now(),
-        },
-        signature,
-        validate: true,
-      });
+      const response = await this.withRetry(() =>
+        this.client.post('/entry', {
+          content,
+          author: this.config.mediatorPublicKey,
+          intent: 'payout_claim',
+          metadata: {
+            settlement_id: settlementId,
+            mediator_id: this.config.mediatorPublicKey,
+            amount,
+            timestamp: Date.now(),
+          },
+          signature,
+          validate: true,
+        })
+      );
 
       return { success: response.status === 200 || response.status === 201 };
     } catch (error) {
@@ -573,7 +576,7 @@ export class ChainClient {
             transactionId: response.data?.transaction_id || response.data?.id,
           };
         }
-      } catch (burnError) {
+      } catch {
         logger.debug('Burn endpoint not available, using /entry');
       }
 
@@ -683,7 +686,7 @@ export class ChainClient {
         valid: response.data?.valid !== false,
         issues: response.data?.issues,
       };
-    } catch (error) {
+    } catch {
       return { valid: false, issues: ['Failed to validate chain'] };
     }
   }
