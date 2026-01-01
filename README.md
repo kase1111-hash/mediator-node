@@ -309,8 +309,8 @@ mediator-node/
 │   ├── MediatorNode.ts     # Main orchestrator (1,350+ lines)
 │   ├── cli.ts              # CLI interface
 │   └── index.ts            # Library exports
-├── test/                   # Comprehensive test suite (200+ unit, 30+ integration)
-├── docs/                   # Protocol specs (MP-02 through MP-06, NCIP-000 through NCIP-015)
+├── test/                   # Comprehensive test suite (52 test files)
+├── docs/                   # Protocol specs & guides (28 documentation files)
 ├── benchmark/              # Performance benchmarking
 ├── examples/mock-chain/    # Mock blockchain for testing
 ├── spec.md                 # Protocol specification (MP-01)
@@ -368,9 +368,10 @@ npm run benchmark
 ```
 
 Test coverage includes:
-- 200+ unit tests (consensus, security, challenge, sybil, etc.)
-- 30+ integration tests (settlement lifecycle, burn analytics, etc.)
+- 26 unit test suites (consensus, security, challenge, sybil, etc.)
+- 9 integration test suites (settlement lifecycle, burn analytics, etc.)
 - End-to-end simulation tests
+- 52 total test files across all categories
 
 ## Integration with Other Repositories
 

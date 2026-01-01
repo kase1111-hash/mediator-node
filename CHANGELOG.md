@@ -57,7 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive TypeScript types (~88KB of type definitions)
 - CLI interface with init, start, and status commands
 - Mock chain server for local development
-- 200+ unit tests, 30+ integration tests
+- 52 test files (26 unit, 9 integration, plus dispute, licensing, websocket, and e2e tests)
 - ESLint with TypeScript rules and Husky pre-commit hooks
 
 ### Documentation
