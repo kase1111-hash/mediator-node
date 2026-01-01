@@ -1,6 +1,6 @@
 {
   "name": "natlangchain-mediator-node",
-  "version": "1.0.0",
+  "version": "0.1.0-alpha",
   "description": "A lightweight mediator node for NatLangChain that discovers, negotiates, and proposes alignments between explicit intents",
   "main": "dist/index.js",
   "bin": {
