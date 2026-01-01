@@ -1,7 +1,6 @@
 import * as dotenv from 'dotenv';
 import { MediatorConfig, ConsensusMode } from '../types';
 import { logger } from '../utils/logger';
-import * as path from 'path';
 
 /**
  * ConfigLoader loads and validates configuration from environment
@@ -225,6 +224,78 @@ export class ConfigLoader {
     // Validate vector dimensions
     if (config.vectorDimensions <= 0) {
       throw new Error('Vector dimensions must be positive');
+    }
+
+    // Validate optional feature configurations
+    this.validateOptionalFeatures(config);
+  }
+
+  /**
+   * Validate optional feature configurations
+   */
+  private static validateOptionalFeatures(config: MediatorConfig): void {
+    // Validate Sybil Resistance configuration
+    if (config.enableSybilResistance) {
+      if (!config.dailyFreeLimit || config.dailyFreeLimit <= 0) {
+        logger.warn('ENABLE_SYBIL_RESISTANCE=true but DAILY_FREE_LIMIT not properly set, using default');
+      }
+      if (!config.excessDepositAmount || config.excessDepositAmount <= 0) {
+        logger.warn('ENABLE_SYBIL_RESISTANCE=true but EXCESS_DEPOSIT_AMOUNT not properly set, using default');
+      }
+    }
+
+    // Validate Dispute System configuration
+    if (config.enableDisputeSystem) {
+      if (!config.maxClarificationDays || config.maxClarificationDays <= 0) {
+        logger.warn('ENABLE_DISPUTE_SYSTEM=true but MAX_CLARIFICATION_DAYS not properly set, using default');
+      }
+    }
+
+    // Validate WebSocket configuration
+    if (config.enableWebSocket) {
+      if (!config.webSocketPort) {
+        logger.warn('ENABLE_WEBSOCKET=true but WEBSOCKET_PORT not set, using default 8080');
+      }
+      if (config.webSocketAllowedOrigins?.includes('*')) {
+        logger.warn('WEBSOCKET_ALLOWED_ORIGINS contains wildcard (*). Not recommended for production.');
+      }
+    }
+
+    // Validate Burn Economics configuration
+    if (config.baseFilingBurn !== undefined && config.baseFilingBurn <= 0) {
+      logger.warn('BASE_FILING_BURN is set but value is not positive');
+    }
+
+    // Validate Security Apps configuration
+    const boundaryDaemonEnabled = process.env.BOUNDARY_DAEMON_ENABLED === 'true';
+    const boundarySIEMEnabled = process.env.BOUNDARY_SIEM_ENABLED === 'true';
+
+    if (boundaryDaemonEnabled && !process.env.BOUNDARY_DAEMON_TOKEN) {
+      logger.warn('BOUNDARY_DAEMON_ENABLED=true but BOUNDARY_DAEMON_TOKEN not set');
+    }
+
+    if (boundarySIEMEnabled && !process.env.BOUNDARY_SIEM_TOKEN) {
+      logger.warn('BOUNDARY_SIEM_ENABLED=true but BOUNDARY_SIEM_TOKEN not set');
+    }
+
+    // Validate Semantic Consensus configuration
+    if (config.enableSemanticConsensus) {
+      if (!config.requiredVerifiers || config.requiredVerifiers <= 0) {
+        logger.warn('ENABLE_SEMANTIC_CONSENSUS=true but REQUIRED_VERIFIERS not set, using default');
+      }
+      if (!config.highValueThreshold || config.highValueThreshold <= 0) {
+        logger.warn('ENABLE_SEMANTIC_CONSENSUS=true but HIGH_VALUE_THRESHOLD not set, using default');
+      }
+    }
+
+    // Validate Governance configuration
+    if (config.enableGovernance) {
+      if (!config.governanceVotingPeriodDays || config.governanceVotingPeriodDays <= 0) {
+        logger.warn('ENABLE_GOVERNANCE=true but GOVERNANCE_VOTING_PERIOD_DAYS not set, using default');
+      }
+      if (!config.governanceQuorumPercentage || config.governanceQuorumPercentage <= 0) {
+        logger.warn('ENABLE_GOVERNANCE=true but GOVERNANCE_QUORUM_PERCENTAGE not set, using default');
+      }
     }
   }
 }

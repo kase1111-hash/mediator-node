@@ -67,9 +67,6 @@ import { PerformanceAnalytics } from '../../src/monitoring/PerformanceAnalytics'
 import { GovernanceManager } from '../../src/governance/GovernanceManager';
 import { logger } from '../../src/utils/logger';
 
-const MockSubmissionTracker = SubmissionTracker as jest.MockedClass<typeof SubmissionTracker>;
-const MockSpamProofDetector = SpamProofDetector as jest.MockedClass<typeof SpamProofDetector>;
-
 // Get mock implementations
 const MockIntentIngester = IntentIngester as jest.MockedClass<typeof IntentIngester>;
 const MockVectorDatabase = VectorDatabase as jest.MockedClass<typeof VectorDatabase>;
@@ -80,6 +77,8 @@ const MockStakeManager = StakeManager as jest.MockedClass<typeof StakeManager>;
 const MockAuthorityManager = AuthorityManager as jest.MockedClass<typeof AuthorityManager>;
 const MockValidatorRotationManager = ValidatorRotationManager as jest.MockedClass<typeof ValidatorRotationManager>;
 const MockBurnManager = BurnManager as jest.MockedClass<typeof BurnManager>;
+const MockSubmissionTracker = SubmissionTracker as jest.MockedClass<typeof SubmissionTracker>;
+const MockSpamProofDetector = SpamProofDetector as jest.MockedClass<typeof SpamProofDetector>;
 const MockLoadMonitor = LoadMonitor as jest.MockedClass<typeof LoadMonitor>;
 const MockHealthMonitor = HealthMonitor as jest.MockedClass<typeof HealthMonitor>;
 const MockWebSocketServer = WebSocketServer as jest.MockedClass<typeof WebSocketServer>;
@@ -423,7 +422,7 @@ describe('MediatorNode', () => {
 
     it('should start in permissionless mode successfully', async () => {
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockVectorDatabase.prototype.initialize).toHaveBeenCalled();
@@ -434,7 +433,7 @@ describe('MediatorNode', () => {
 
     it('should initialize vector database', async () => {
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockVectorDatabase.prototype.initialize).toHaveBeenCalled();
@@ -442,7 +441,7 @@ describe('MediatorNode', () => {
 
     it('should load reputation', async () => {
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockReputationTracker.prototype.loadReputation).toHaveBeenCalled();
@@ -450,7 +449,7 @@ describe('MediatorNode', () => {
 
     it('should start polling for intents', async () => {
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockIntentIngester.prototype.startPolling).toHaveBeenCalledWith(10000);
@@ -468,7 +467,7 @@ describe('MediatorNode', () => {
 
       it('should load delegations', async () => {
         const startPromise = node.start();
-        jest.runAllTimers();
+        jest.advanceTimersByTime(100);
         await startPromise;
 
         expect(MockStakeManager.prototype.loadDelegations).toHaveBeenCalled();
@@ -476,7 +475,7 @@ describe('MediatorNode', () => {
 
       it('should bond stake if configured', async () => {
         const startPromise = node.start();
-        jest.runAllTimers();
+        jest.advanceTimersByTime(100);
         await startPromise;
 
         expect(MockStakeManager.prototype.bondStake).toHaveBeenCalledWith(1000);
@@ -484,7 +483,7 @@ describe('MediatorNode', () => {
 
       it('should check minimum stake requirement', async () => {
         const startPromise = node.start();
-        jest.runAllTimers();
+        jest.advanceTimersByTime(100);
         await startPromise;
 
         expect(MockStakeManager.prototype.meetsMinimumStake).toHaveBeenCalled();
@@ -494,7 +493,7 @@ describe('MediatorNode', () => {
         MockStakeManager.prototype.meetsMinimumStake.mockReturnValue(false);
 
         const startPromise = node.start();
-        jest.runAllTimers();
+        jest.advanceTimersByTime(100);
         await startPromise;
 
         expect(logger.error).toHaveBeenCalledWith('Cannot start: Minimum stake requirement not met');
@@ -503,7 +502,7 @@ describe('MediatorNode', () => {
 
       it('should start validator rotation manager', async () => {
         const startPromise = node.start();
-        jest.runAllTimers();
+        jest.advanceTimersByTime(100);
         await startPromise;
 
         expect(MockValidatorRotationManager.prototype.start).toHaveBeenCalled();
@@ -522,7 +521,7 @@ describe('MediatorNode', () => {
 
       it('should load authority set', async () => {
         const startPromise = node.start();
-        jest.runAllTimers();
+        jest.advanceTimersByTime(100);
         await startPromise;
 
         expect(MockAuthorityManager.prototype.loadAuthoritySet).toHaveBeenCalled();
@@ -530,7 +529,7 @@ describe('MediatorNode', () => {
 
       it('should check authorization', async () => {
         const startPromise = node.start();
-        jest.runAllTimers();
+        jest.advanceTimersByTime(100);
         await startPromise;
 
         expect(MockAuthorityManager.prototype.checkAuthorization).toHaveBeenCalled();
@@ -540,7 +539,7 @@ describe('MediatorNode', () => {
         MockAuthorityManager.prototype.checkAuthorization.mockReturnValue(false);
 
         const startPromise = node.start();
-        jest.runAllTimers();
+        jest.advanceTimersByTime(100);
         await startPromise;
 
         expect(logger.error).toHaveBeenCalledWith('Cannot start: Not authorized in PoA mode');
@@ -553,7 +552,7 @@ describe('MediatorNode', () => {
       node = new MediatorNode(config);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockLoadMonitor.prototype.startMonitoring).toHaveBeenCalledWith(5000);
@@ -564,7 +563,7 @@ describe('MediatorNode', () => {
       node = new MediatorNode(config);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockWebSocketServer.prototype.start).toHaveBeenCalled();
@@ -575,7 +574,7 @@ describe('MediatorNode', () => {
       node = new MediatorNode(config);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockHealthMonitor.prototype.start).toHaveBeenCalled();
@@ -586,7 +585,7 @@ describe('MediatorNode', () => {
       node = new MediatorNode(config);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockHealthMonitor.prototype.registerComponent).toHaveBeenCalled();
@@ -597,7 +596,7 @@ describe('MediatorNode', () => {
       node = new MediatorNode(config);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(GovernanceManager.prototype.start).toHaveBeenCalled();
@@ -608,7 +607,7 @@ describe('MediatorNode', () => {
       node = new MediatorNode(config);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(EffortCaptureSystem.prototype.start).toHaveBeenCalled();
@@ -626,7 +625,7 @@ describe('MediatorNode', () => {
     beforeEach(async () => {
       node = new MediatorNode(config);
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
     });
 
@@ -740,7 +739,7 @@ describe('MediatorNode', () => {
 
     it('should return running true after start', async () => {
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       const status = node.getStatus();
@@ -957,7 +956,7 @@ describe('MediatorNode', () => {
       MockIntentIngester.prototype.getPrioritizedIntents.mockReturnValue(mockIntents);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       // Advance timers to trigger alignment cycle
@@ -972,7 +971,7 @@ describe('MediatorNode', () => {
       MockVectorDatabase.prototype.findTopAlignmentCandidates.mockResolvedValue([]);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockLLMProvider.prototype.generateEmbedding).toHaveBeenCalled();
@@ -982,7 +981,7 @@ describe('MediatorNode', () => {
       MockIntentIngester.prototype.getPrioritizedIntents.mockReturnValue([]);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       expect(MockVectorDatabase.prototype.findTopAlignmentCandidates).not.toHaveBeenCalled();
@@ -994,7 +993,7 @@ describe('MediatorNode', () => {
       });
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       // Should log error but not crash
@@ -1008,7 +1007,7 @@ describe('MediatorNode', () => {
       MockValidatorRotationManager.prototype.shouldMediate.mockReturnValue(false);
 
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
 
       // Should not process intents when not our slot
@@ -1020,7 +1019,7 @@ describe('MediatorNode', () => {
     beforeEach(async () => {
       node = new MediatorNode(config);
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
     });
 
@@ -1051,7 +1050,7 @@ describe('MediatorNode', () => {
       config = createMockConfig({ enableChallengeSubmission: true });
       node = new MediatorNode(config);
       const startPromise = node.start();
-      jest.runAllTimers();
+      jest.advanceTimersByTime(100);
       await startPromise;
     });
 

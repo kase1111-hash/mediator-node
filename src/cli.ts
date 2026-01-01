@@ -1,9 +1,29 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander';
+import * as fs from 'fs';
 import { MediatorNode } from './MediatorNode';
 import { ConfigLoader } from './config/ConfigLoader';
 import { logger } from './utils/logger';
+
+// Global error handlers to prevent silent crashes
+process.on('unhandledRejection', (reason, _promise) => {
+  logger.error('Unhandled Promise Rejection', {
+    reason: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+  process.exit(1);
+});
+
+process.on('uncaughtException', (error) => {
+  logger.error('Uncaught Exception', {
+    error: error.message,
+    stack: error.stack,
+  });
+  process.exit(1);
+});
+
+const SHUTDOWN_TIMEOUT_MS = 30000; // 30 seconds
 
 const program = new Command();
 
@@ -28,18 +48,32 @@ program
       const node = new MediatorNode(config);
       await node.start();
 
-      // Handle graceful shutdown
-      process.on('SIGINT', async () => {
-        logger.info('Received SIGINT, shutting down gracefully...');
-        await node.stop();
-        process.exit(0);
-      });
+      // Handle graceful shutdown with timeout
+      const gracefulShutdown = async (signal: string) => {
+        logger.info(`Received ${signal}, shutting down gracefully...`);
 
-      process.on('SIGTERM', async () => {
-        logger.info('Received SIGTERM, shutting down gracefully...');
-        await node.stop();
-        process.exit(0);
-      });
+        // Set a timeout to force exit if graceful shutdown takes too long
+        const shutdownTimeout = setTimeout(() => {
+          logger.error('Graceful shutdown timeout exceeded, forcing exit');
+          process.exit(1);
+        }, SHUTDOWN_TIMEOUT_MS);
+
+        try {
+          await node.stop();
+          clearTimeout(shutdownTimeout);
+          logger.info('Graceful shutdown completed');
+          process.exit(0);
+        } catch (error) {
+          clearTimeout(shutdownTimeout);
+          logger.error('Error during graceful shutdown', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+          process.exit(1);
+        }
+      };
+
+      process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+      process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
       // Keep the process running
       if (!options.daemon) {
@@ -85,7 +119,6 @@ program
   .description('Initialize configuration file')
   .option('-o, --output <path>', 'Output path for .env file', '.env')
   .action((options) => {
-    const fs = require('fs');
     const examplePath = '.env.example';
 
     if (fs.existsSync(examplePath)) {

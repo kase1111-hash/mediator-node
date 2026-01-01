@@ -1141,6 +1141,55 @@ export class MediatorNode {
       return;
     }
 
+    // Chain connectivity health checker
+    this.healthMonitor.registerComponent(
+      'chain-client',
+      async () => {
+        try {
+          const startTime = Date.now();
+          const response = await axios.get(
+            `${this.config.chainEndpoint}/health`,
+            { timeout: 5000 }
+          );
+          const responseTime = Date.now() - startTime;
+
+          const isHealthy = response.status === 200;
+          let status: 'healthy' | 'degraded' | 'unhealthy' = 'healthy';
+
+          // Mark as degraded if response time is high
+          if (responseTime > 2000) {
+            status = 'degraded';
+          }
+          if (!isHealthy) {
+            status = 'unhealthy';
+          }
+
+          return {
+            name: 'chain-client',
+            status,
+            message: `Chain endpoint ${isHealthy ? 'reachable' : 'unreachable'} (${responseTime}ms)`,
+            lastCheck: Date.now(),
+            responseTime,
+            metadata: {
+              endpoint: this.config.chainEndpoint,
+              responseTime,
+            },
+          };
+        } catch (error) {
+          return {
+            name: 'chain-client',
+            status: 'unhealthy' as const,
+            message: `Chain endpoint unreachable: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            lastCheck: Date.now(),
+            metadata: {
+              endpoint: this.config.chainEndpoint,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            },
+          };
+        }
+      }
+    );
+
     // Vector database health checker
     this.healthMonitor.registerComponent(
       'vector-database',
@@ -1270,7 +1319,7 @@ export class MediatorNode {
     );
 
     logger.debug('Component health checkers registered', {
-      count: 5 + (this.webSocketServer ? 1 : 0),
+      count: 6 + (this.webSocketServer ? 1 : 0),
     });
   }
 

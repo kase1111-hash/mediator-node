@@ -31,6 +31,19 @@ export interface WebSocketServerConfig {
    */
   allowedOrigins: string[];
   enableCompression?: boolean;
+  /**
+   * Maximum messages per second per connection (rate limiting)
+   * Default: 100
+   */
+  maxMessagesPerSecond?: number;
+}
+
+/**
+ * Rate limit tracking for a connection
+ */
+interface RateLimitState {
+  messageCount: number;
+  windowStart: number;
 }
 
 /**
@@ -47,6 +60,7 @@ export class WebSocketServer {
   private heartbeatIntervalId?: NodeJS.Timeout;
   private authTimeouts: Map<string, NodeJS.Timeout>;
   private authService: AuthenticationService;
+  private rateLimitStates: Map<string, RateLimitState>;
 
   constructor(config: WebSocketServerConfig, authService?: AuthenticationService) {
     // SECURITY: Warn if wildcard CORS is used
@@ -63,11 +77,13 @@ export class WebSocketServer {
       heartbeatInterval: config.heartbeatInterval || 30000, // 30 seconds
       maxConnections: config.maxConnections || 1000,
       enableCompression: config.enableCompression ?? true,
+      maxMessagesPerSecond: config.maxMessagesPerSecond || 100,
     };
 
     this.connections = new Map();
     this.clients = new Map();
     this.authTimeouts = new Map();
+    this.rateLimitStates = new Map();
     this.authService = authService || new AuthenticationService();
 
     // Create HTTP server
@@ -444,6 +460,35 @@ export class WebSocketServer {
 
     connection.lastActivity = Date.now();
 
+    // SECURITY: Rate limiting per connection
+    const now = Date.now();
+    let rateState = this.rateLimitStates.get(connectionId);
+    if (!rateState) {
+      rateState = { messageCount: 0, windowStart: now };
+      this.rateLimitStates.set(connectionId, rateState);
+    }
+
+    // Reset window if more than 1 second has passed
+    if (now - rateState.windowStart >= 1000) {
+      rateState.messageCount = 0;
+      rateState.windowStart = now;
+    }
+
+    rateState.messageCount++;
+
+    if (rateState.messageCount > this.config.maxMessagesPerSecond) {
+      logger.warn('Rate limit exceeded, closing connection', {
+        connectionId,
+        messagesPerSecond: rateState.messageCount,
+        limit: this.config.maxMessagesPerSecond,
+      });
+      const ws = this.clients.get(connectionId);
+      if (ws) {
+        ws.close(1008, 'Rate limit exceeded');
+      }
+      return;
+    }
+
     try {
       // SECURITY: Enforce message size limit (100 KB)
       const MAX_MESSAGE_SIZE = 100 * 1024;
@@ -772,6 +817,9 @@ export class WebSocketServer {
       clearTimeout(timeout);
       this.authTimeouts.delete(connectionId);
     }
+
+    // Clean up rate limit state
+    this.rateLimitStates.delete(connectionId);
 
     this.connections.delete(connectionId);
     this.clients.delete(connectionId);
