@@ -39,6 +39,8 @@ export {
   SIEMAlert,
   EventQueryFilters,
   BoundarySIEMConfig,
+  AlertCallback,
+  WebSocketState,
 } from './BoundarySIEMClient';
 
 // Security Apps configuration
