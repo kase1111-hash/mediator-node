@@ -9,6 +9,7 @@
  */
 
 import axios, { AxiosInstance } from 'axios';
+import WebSocket from 'ws';
 import { logger } from '../utils/logger';
 
 /**
@@ -125,6 +126,16 @@ export interface EventQueryFilters {
 }
 
 /**
+ * Callback for real-time alert notifications
+ */
+export type AlertCallback = (alert: SIEMAlert) => void | Promise<void>;
+
+/**
+ * WebSocket connection state
+ */
+export type WebSocketState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
+
+/**
  * Configuration for the Boundary SIEM client
  */
 export interface BoundarySIEMConfig {
@@ -144,6 +155,14 @@ export interface BoundarySIEMConfig {
   retryAttempts: number;
   /** Source identifier for events from this node */
   sourceId: string;
+  /** Enable WebSocket for real-time alerts (default: false) */
+  enableWebSocket?: boolean;
+  /** WebSocket URL for real-time alerts (derived from baseUrl if not set) */
+  webSocketUrl?: string;
+  /** WebSocket reconnect interval in milliseconds (default: 5000) */
+  webSocketReconnectInterval?: number;
+  /** Maximum WebSocket reconnect attempts (default: 10) */
+  webSocketMaxReconnectAttempts?: number;
 }
 
 /**
@@ -169,6 +188,13 @@ export class BoundarySIEMClient {
   private connected: boolean = false;
   private eventBatch: SecurityEvent[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
+
+  // WebSocket alert streaming
+  private alertWebSocket: WebSocket | null = null;
+  private alertCallbacks: Set<AlertCallback> = new Set();
+  private webSocketState: WebSocketState = 'disconnected';
+  private webSocketReconnectAttempts: number = 0;
+  private webSocketReconnectTimer: NodeJS.Timeout | null = null;
 
   constructor(config: Partial<BoundarySIEMConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -581,6 +607,309 @@ export class BoundarySIEMClient {
     }
   }
 
+  // ==========================================
+  // WebSocket Real-Time Alert Streaming
+  // ==========================================
+
+  /**
+   * Start WebSocket connection for real-time alert streaming
+   * Connects to the SIEM WebSocket endpoint and receives alerts in real-time.
+   *
+   * @see https://github.com/kase1111-hash/Boundary-SIEM
+   */
+  public async startAlertStream(): Promise<boolean> {
+    if (!this.config.enableWebSocket) {
+      logger.debug('WebSocket alerts not enabled in configuration');
+      return false;
+    }
+
+    if (this.webSocketState === 'connected' || this.webSocketState === 'connecting') {
+      logger.debug('Alert stream already connected or connecting');
+      return this.webSocketState === 'connected';
+    }
+
+    this.webSocketState = 'connecting';
+
+    try {
+      const wsUrl = this.getWebSocketUrl();
+      await this.connectAlertWebSocket(wsUrl);
+      return true;
+    } catch (error) {
+      logger.error('Failed to start alert stream', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      this.webSocketState = 'disconnected';
+      return false;
+    }
+  }
+
+  /**
+   * Stop the WebSocket alert stream
+   */
+  public stopAlertStream(): void {
+    this.cleanupWebSocket();
+    this.webSocketState = 'disconnected';
+    this.webSocketReconnectAttempts = 0;
+
+    if (this.webSocketReconnectTimer) {
+      clearTimeout(this.webSocketReconnectTimer);
+      this.webSocketReconnectTimer = null;
+    }
+
+    logger.info('Alert stream stopped');
+  }
+
+  /**
+   * Subscribe to real-time alerts
+   *
+   * @param callback Function to call when an alert is received
+   * @returns Unsubscribe function
+   */
+  public onAlert(callback: AlertCallback): () => void {
+    this.alertCallbacks.add(callback);
+
+    // Return unsubscribe function
+    return () => {
+      this.alertCallbacks.delete(callback);
+    };
+  }
+
+  /**
+   * Get the current WebSocket connection state
+   */
+  public getWebSocketState(): WebSocketState {
+    return this.webSocketState;
+  }
+
+  /**
+   * Get the WebSocket URL from configuration
+   */
+  private getWebSocketUrl(): string {
+    if (this.config.webSocketUrl) {
+      return this.config.webSocketUrl;
+    }
+
+    // Derive from baseUrl: http -> ws, https -> wss
+    const baseUrl = this.config.baseUrl;
+    const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
+    const hostPart = baseUrl.replace(/^https?:\/\//, '');
+    return `${wsProtocol}://${hostPart}/ws/alerts`;
+  }
+
+  /**
+   * Connect to the SIEM WebSocket endpoint
+   */
+  private async connectAlertWebSocket(url: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+      const headers: Record<string, string> = {};
+      if (this.config.apiToken) {
+        headers['Authorization'] = `Bearer ${this.config.apiToken}`;
+      }
+
+      this.alertWebSocket = new WebSocket(url, {
+        headers,
+        handshakeTimeout: this.config.timeout,
+      });
+
+      const connectionTimeout = setTimeout(() => {
+        if (this.webSocketState === 'connecting') {
+          this.cleanupWebSocket();
+          reject(new Error('WebSocket connection timeout'));
+        }
+      }, this.config.timeout);
+
+      this.alertWebSocket.on('open', () => {
+        clearTimeout(connectionTimeout);
+        this.webSocketState = 'connected';
+        this.webSocketReconnectAttempts = 0;
+
+        logger.info('Connected to Boundary SIEM alert stream', {
+          url: url.replace(/token=[^&]+/, 'token=***'), // Mask token in logs
+        });
+
+        // Send subscription message for alerts
+        this.sendAlertSubscription();
+        resolve();
+      });
+
+      this.alertWebSocket.on('message', (data: Buffer) => {
+        this.handleAlertMessage(data);
+      });
+
+      this.alertWebSocket.on('close', (code: number, reason: Buffer) => {
+        clearTimeout(connectionTimeout);
+        const wasConnected = this.webSocketState === 'connected';
+        this.webSocketState = 'disconnected';
+
+        logger.info('Boundary SIEM alert stream closed', {
+          code,
+          reason: reason.toString(),
+        });
+
+        // Attempt reconnection if we were previously connected
+        if (wasConnected && this.alertCallbacks.size > 0) {
+          this.scheduleReconnect();
+        }
+      });
+
+      this.alertWebSocket.on('error', (error: Error) => {
+        clearTimeout(connectionTimeout);
+        logger.error('Boundary SIEM alert stream error', {
+          error: error.message,
+        });
+
+        if (this.webSocketState === 'connecting') {
+          reject(error);
+        }
+      });
+    });
+  }
+
+  /**
+   * Send alert subscription message to SIEM
+   */
+  private sendAlertSubscription(): void {
+    if (!this.alertWebSocket || this.alertWebSocket.readyState !== WebSocket.OPEN) {
+      return;
+    }
+
+    const subscription = {
+      type: 'subscribe',
+      channels: ['alerts'],
+      filters: {
+        sourceId: this.config.sourceId,
+      },
+    };
+
+    try {
+      this.alertWebSocket.send(JSON.stringify(subscription));
+      logger.debug('Sent alert subscription to SIEM');
+    } catch (error) {
+      logger.error('Failed to send alert subscription', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * Handle incoming alert message from WebSocket
+   */
+  private handleAlertMessage(data: Buffer): void {
+    try {
+      const message = JSON.parse(data.toString());
+
+      // Check if this is an alert message
+      if (message.type === 'alert' && message.alert) {
+        const alert: SIEMAlert = message.alert;
+
+        logger.debug('Received real-time alert from SIEM', {
+          alertId: alert.alertId,
+          severity: alert.severity,
+          ruleName: alert.ruleName,
+        });
+
+        // Notify all subscribers
+        this.notifyAlertCallbacks(alert);
+      } else if (message.type === 'heartbeat') {
+        // Respond to heartbeat
+        if (this.alertWebSocket?.readyState === WebSocket.OPEN) {
+          this.alertWebSocket.send(JSON.stringify({ type: 'pong' }));
+        }
+      } else if (message.type === 'subscribed') {
+        logger.debug('Successfully subscribed to SIEM alerts', {
+          channels: message.channels,
+        });
+      }
+    } catch (error) {
+      logger.warn('Failed to parse alert message from SIEM', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  /**
+   * Notify all registered callbacks about a new alert
+   */
+  private notifyAlertCallbacks(alert: SIEMAlert): void {
+    for (const callback of this.alertCallbacks) {
+      try {
+        const result = callback(alert);
+        // Handle async callbacks
+        if (result instanceof Promise) {
+          result.catch(error => {
+            logger.error('Alert callback error', {
+              alertId: alert.alertId,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          });
+        }
+      } catch (error) {
+        logger.error('Alert callback error', {
+          alertId: alert.alertId,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    }
+  }
+
+  /**
+   * Schedule WebSocket reconnection
+   */
+  private scheduleReconnect(): void {
+    const maxAttempts = this.config.webSocketMaxReconnectAttempts ?? 10;
+    const reconnectInterval = this.config.webSocketReconnectInterval ?? 5000;
+
+    if (this.webSocketReconnectAttempts >= maxAttempts) {
+      logger.error('Max WebSocket reconnect attempts reached', {
+        attempts: this.webSocketReconnectAttempts,
+        maxAttempts,
+      });
+      return;
+    }
+
+    this.webSocketState = 'reconnecting';
+    this.webSocketReconnectAttempts++;
+
+    // Exponential backoff: base interval * 2^attempts (capped at 60s)
+    const delay = Math.min(
+      reconnectInterval * Math.pow(2, this.webSocketReconnectAttempts - 1),
+      60000
+    );
+
+    logger.info('Scheduling WebSocket reconnect', {
+      attempt: this.webSocketReconnectAttempts,
+      maxAttempts,
+      delayMs: delay,
+    });
+
+    this.webSocketReconnectTimer = setTimeout(async () => {
+      try {
+        const wsUrl = this.getWebSocketUrl();
+        await this.connectAlertWebSocket(wsUrl);
+      } catch (error) {
+        logger.error('WebSocket reconnect failed', {
+          attempt: this.webSocketReconnectAttempts,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        this.scheduleReconnect();
+      }
+    }, delay);
+  }
+
+  /**
+   * Clean up WebSocket connection
+   */
+  private cleanupWebSocket(): void {
+    if (this.alertWebSocket) {
+      this.alertWebSocket.removeAllListeners();
+      if (this.alertWebSocket.readyState === WebSocket.OPEN ||
+          this.alertWebSocket.readyState === WebSocket.CONNECTING) {
+        this.alertWebSocket.close(1000, 'Client closing');
+      }
+      this.alertWebSocket = null;
+    }
+  }
+
   /**
    * Disconnect from the SIEM and flush remaining events
    */
@@ -589,6 +918,9 @@ export class BoundarySIEMClient {
       clearInterval(this.flushTimer);
       this.flushTimer = null;
     }
+
+    // Stop WebSocket alert stream
+    this.stopAlertStream();
 
     // Flush any remaining events
     await this.flushEvents();
@@ -608,6 +940,8 @@ export class BoundarySIEMClient {
         details: {
           connected: true,
           queuedEvents: this.eventBatch.length,
+          webSocketState: this.webSocketState,
+          webSocketEnabled: this.config.enableWebSocket ?? false,
           lastCheck: Date.now(),
         },
       };
@@ -617,6 +951,8 @@ export class BoundarySIEMClient {
         details: {
           connected: false,
           queuedEvents: this.eventBatch.length,
+          webSocketState: this.webSocketState,
+          webSocketEnabled: this.config.enableWebSocket ?? false,
           lastCheck: Date.now(),
         },
       };
