@@ -57,3 +57,15 @@ export {
   getSecurityAppsManager,
   resetSecurityAppsManager,
 } from './SecurityAppsManager';
+
+// Error Handler with security reporting
+export {
+  ErrorHandler,
+  ErrorSeverity,
+  ErrorCategory,
+  ErrorContext,
+  ErrorReportResult,
+  getErrorHandler,
+  initializeErrorHandler,
+  resetErrorHandler,
+} from './ErrorHandler';

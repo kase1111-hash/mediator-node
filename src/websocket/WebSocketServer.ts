@@ -14,6 +14,7 @@ import {
 import { logger } from '../utils/logger';
 import { AuthenticationService } from './AuthenticationService';
 import { WebSocketMessageSchema, AuthenticationMessageSchema } from '../validation/schemas';
+import { SecurityAppsManager } from '../security/SecurityAppsManager';
 
 /**
  * Configuration for WebSocket server
@@ -31,6 +32,19 @@ export interface WebSocketServerConfig {
    */
   allowedOrigins: string[];
   enableCompression?: boolean;
+  /**
+   * Maximum messages per second per connection (rate limiting)
+   * Default: 100
+   */
+  maxMessagesPerSecond?: number;
+}
+
+/**
+ * Rate limit tracking for a connection
+ */
+interface RateLimitState {
+  messageCount: number;
+  windowStart: number;
 }
 
 /**
@@ -47,6 +61,8 @@ export class WebSocketServer {
   private heartbeatIntervalId?: NodeJS.Timeout;
   private authTimeouts: Map<string, NodeJS.Timeout>;
   private authService: AuthenticationService;
+  private rateLimitStates: Map<string, RateLimitState>;
+  private securityApps?: SecurityAppsManager;
 
   constructor(config: WebSocketServerConfig, authService?: AuthenticationService) {
     // SECURITY: Warn if wildcard CORS is used
@@ -63,11 +79,13 @@ export class WebSocketServer {
       heartbeatInterval: config.heartbeatInterval || 30000, // 30 seconds
       maxConnections: config.maxConnections || 1000,
       enableCompression: config.enableCompression ?? true,
+      maxMessagesPerSecond: config.maxMessagesPerSecond || 100,
     };
 
     this.connections = new Map();
     this.clients = new Map();
     this.authTimeouts = new Map();
+    this.rateLimitStates = new Map();
     this.authService = authService || new AuthenticationService();
 
     // Create HTTP server
@@ -83,6 +101,79 @@ export class WebSocketServer {
     });
 
     this.setupEventHandlers();
+  }
+
+  /**
+   * Set the Security Apps Manager for connection protection
+   * When set, connections will be validated against Boundary Daemon policies
+   */
+  public setSecurityAppsManager(securityApps: SecurityAppsManager): void {
+    this.securityApps = securityApps;
+    logger.info('WebSocket security apps protection enabled');
+  }
+
+  /**
+   * Check if a connection is allowed by Boundary Daemon policy
+   */
+  private async checkConnectionPolicy(
+    origin: string,
+    ip: string,
+    userAgent: string
+  ): Promise<{ allowed: boolean; reason?: string }> {
+    if (!this.securityApps) {
+      return { allowed: true };
+    }
+
+    try {
+      // Check if we're in lockdown mode
+      const inLockdown = await this.securityApps.isInLockdown();
+      if (inLockdown) {
+        return { allowed: false, reason: 'System in lockdown mode' };
+      }
+
+      // Request policy decision from Boundary Daemon
+      const decision = await this.securityApps.requestPolicyDecision(
+        'websocket_connect',
+        'websocket_server',
+        {
+          origin,
+          ip,
+          userAgent,
+          timestamp: Date.now(),
+        }
+      );
+
+      if (decision && !decision.allowed) {
+        // Log the blocked connection to SIEM
+        await this.securityApps.logSecurityAction(
+          {
+            actor: ip,
+            action: 'websocket_connect',
+            resource: origin,
+            category: 'authorization',
+            severity: 5,
+            details: {
+              userAgent,
+              reason: decision.reason,
+              mode: decision.mode,
+            },
+          },
+          'blocked'
+        );
+
+        return { allowed: false, reason: decision.reason };
+      }
+
+      return { allowed: true };
+    } catch (error) {
+      // Log but don't block on security check failures (fail-open for connection checks)
+      logger.warn('Security policy check failed for WebSocket connection', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        origin,
+        ip,
+      });
+      return { allowed: true };
+    }
   }
 
   /**
@@ -350,6 +441,28 @@ export class WebSocketServer {
         return;
       }
 
+      const userAgent = req.headers['user-agent'] || '';
+      const ip = req.socket.remoteAddress || '';
+
+      // Check Boundary Daemon policy (async)
+      if (this.securityApps) {
+        this.checkConnectionPolicy(origin, ip, userAgent).then(policyResult => {
+          if (!policyResult.allowed) {
+            ws.close(1008, policyResult.reason || 'Connection blocked by security policy');
+            logger.warn('Connection rejected by security policy', {
+              origin,
+              ip,
+              reason: policyResult.reason,
+            });
+          }
+        }).catch(err => {
+          // Log but don't block on policy check errors
+          logger.warn('Security policy check error', {
+            error: err instanceof Error ? err.message : 'Unknown',
+          });
+        });
+      }
+
       // Create connection metadata
       const connection: WebSocketConnection = {
         connectionId,
@@ -360,8 +473,8 @@ export class WebSocketServer {
         authenticated: !this.config.authRequired,
         metadata: {
           origin,
-          userAgent: req.headers['user-agent'] || '',
-          ip: req.socket.remoteAddress || '',
+          userAgent,
+          ip,
         },
       };
 
@@ -443,6 +556,35 @@ export class WebSocketServer {
     }
 
     connection.lastActivity = Date.now();
+
+    // SECURITY: Rate limiting per connection
+    const now = Date.now();
+    let rateState = this.rateLimitStates.get(connectionId);
+    if (!rateState) {
+      rateState = { messageCount: 0, windowStart: now };
+      this.rateLimitStates.set(connectionId, rateState);
+    }
+
+    // Reset window if more than 1 second has passed
+    if (now - rateState.windowStart >= 1000) {
+      rateState.messageCount = 0;
+      rateState.windowStart = now;
+    }
+
+    rateState.messageCount++;
+
+    if (rateState.messageCount > this.config.maxMessagesPerSecond) {
+      logger.warn('Rate limit exceeded, closing connection', {
+        connectionId,
+        messagesPerSecond: rateState.messageCount,
+        limit: this.config.maxMessagesPerSecond,
+      });
+      const ws = this.clients.get(connectionId);
+      if (ws) {
+        ws.close(1008, 'Rate limit exceeded');
+      }
+      return;
+    }
 
     try {
       // SECURITY: Enforce message size limit (100 KB)
@@ -772,6 +914,9 @@ export class WebSocketServer {
       clearTimeout(timeout);
       this.authTimeouts.delete(connectionId);
     }
+
+    // Clean up rate limit state
+    this.rateLimitStates.delete(connectionId);
 
     this.connections.delete(connectionId);
     this.clients.delete(connectionId);
