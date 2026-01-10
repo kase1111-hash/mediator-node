@@ -1,22 +1,22 @@
 # NatLangChain Mediator Node
 
-A lightweight, dedicated node that discovers, negotiates, and proposes alignments between explicit intents on the NatLangChain protocol.
+An **LLM mediator** and **AI negotiation node** for the NatLangChain protocol. This **semantic matching engine** enables **natural language mediation** between parties, providing **automated deal closure** through an **AI arbitration system** using a **linguistic negotiation protocol**.
 
 ## Purpose
 
-The Mediator Node is a standalone service that:
+The Mediator Node is a standalone **LLM-powered deal matching** service that:
 - Connects to one or more NatLangChain instances (local or remote)
-- Runs LLM-powered mediation (matching, negotiation, closure proposals)
+- Runs **AI mediation for agreements** (matching, negotiation, closure proposals)
 - Performs "mining" by submitting successful mediation blocks
 - Earns facilitation fees when settlements are accepted
-- Requires no buying/selling logic — **pure mediation service**
+- Enables **automated contract negotiation** — **pure mediation service**
 
 ## Features
 
 ### Core Capabilities
 - **Intent Ingestion**: Monitors the blockchain for pending intents
-- **Semantic Mapping**: Uses vector embeddings to find high-probability alignments
-- **LLM Negotiation**: Simulates multi-turn dialogue to find viable settlements
+- **Semantic Mapping**: Uses vector embeddings for **semantic proposal generation** and high-probability alignments
+- **LLM Negotiation**: Simulates multi-turn dialogue enabling **natural language arbitration** for viable settlements
 - **Settlement Proposals**: Publishes proposed settlements to the chain
 - **Fee Collection**: Claims facilitation fees when both parties accept
 
@@ -521,6 +521,37 @@ MIT License - see [LICENSE](./LICENSE)
 For issues, questions, or feedback:
 - GitHub Issues: https://github.com/kase1111-hash/mediator-node/issues
 - Email: kase1111@gmail.com
+
+## Connected Repositories
+
+The mediator-node is part of a larger ecosystem of tools for **natural language programming**, **intent preservation**, and **human-AI collaboration**.
+
+### NatLangChain Ecosystem
+
+| Repository | Description |
+|------------|-------------|
+| [NatLangChain](https://github.com/kase1111-hash/NatLangChain) | Prose-first, intent-native blockchain protocol for recording human intent in natural language |
+| [IntentLog](https://github.com/kase1111-hash/IntentLog) | Git for human reasoning - tracks "why" changes happen via prose commits |
+| [RRA-Module](https://github.com/kase1111-hash/RRA-Module) | Revenant Repo Agent - converts abandoned repositories into autonomous AI agents |
+| [ILR-module](https://github.com/kase1111-hash/ILR-module) | IP & Licensing Reconciliation - dispute resolution for intellectual property conflicts |
+| [Finite-Intent-Executor](https://github.com/kase1111-hash/Finite-Intent-Executor) | Posthumous execution of predefined intent via Solidity smart contracts |
+
+### Agent-OS Ecosystem
+
+| Repository | Description |
+|------------|-------------|
+| [Agent-OS](https://github.com/kase1111-hash/Agent-OS) | Natural-language native operating system for AI agents |
+| [synth-mind](https://github.com/kase1111-hash/synth-mind) | NLOS-based agent with psychological modules for emergent continuity and empathy |
+| [boundary-daemon-](https://github.com/kase1111-hash/boundary-daemon-) | Mandatory trust enforcement layer defining cognition boundaries |
+| [memory-vault](https://github.com/kase1111-hash/memory-vault) | Secure, offline-capable, owner-sovereign storage for cognitive artifacts |
+| [value-ledger](https://github.com/kase1111-hash/value-ledger) | Economic accounting layer for cognitive work (ideas, effort, novelty) |
+| [learning-contracts](https://github.com/kase1111-hash/learning-contracts) | Safety protocols for AI learning and data management |
+
+### Security Infrastructure
+
+| Repository | Description |
+|------------|-------------|
+| [Boundary-SIEM](https://github.com/kase1111-hash/Boundary-SIEM) | Security Information and Event Management for AI systems |
 
 ---
 
