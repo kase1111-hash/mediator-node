@@ -169,7 +169,7 @@ export class EventPublisher {
   private matchesSubscription(
     message: WebSocketMessage,
     subscription: WebSocketSubscription,
-    connection: WebSocketConnection
+    _connection: WebSocketConnection
   ): boolean {
     // Check if event type is in subscribed topics
     if (!subscription.topics.includes(message.type)) {
@@ -181,7 +181,6 @@ export class EventPublisher {
       return true;
     }
 
-    const { payload } = message;
     const { filters } = subscription;
 
     // Filter by parties
@@ -514,7 +513,7 @@ export class EventPublisher {
   /**
    * Extract severity from event payload
    */
-  private extractSeverity(message: WebSocketMessage): 'low' | 'medium' | 'high' | null {
+  private extractSeverity(_message: WebSocketMessage): 'low' | 'medium' | 'high' | null {
     // ScopeViolation doesn't currently have a severity field
     // This could be extended in the future if needed
     return null;

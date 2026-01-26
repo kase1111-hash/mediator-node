@@ -6,7 +6,6 @@ import {
   CapitalizationEvent,
   CapitalizationInterface,
   ValueType,
-  Settlement,
 } from '../types';
 import { MP05SettlementManager } from './MP05SettlementManager';
 

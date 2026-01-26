@@ -1,4 +1,4 @@
-import { Signal, EffortSegment, SegmentStatus } from '../types';
+import { Signal, EffortSegment } from '../types';
 import { nanoid } from 'nanoid';
 import { logger } from '../utils/logger';
 

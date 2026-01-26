@@ -83,6 +83,7 @@ export function sanitizeForPrompt(
 
   // Remove control characters (except newlines and tabs)
   if (removeControlChars) {
+    // eslint-disable-next-line no-control-regex
     sanitized = sanitized.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
   }
 

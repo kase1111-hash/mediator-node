@@ -184,7 +184,7 @@ Provide your assessment now:`;
    */
   private parseValidationResponse(
     response: string,
-    segment: EffortSegment
+    _segment: EffortSegment
   ): ValidationAssessment {
     try {
       // Extract JSON from response

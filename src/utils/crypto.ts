@@ -91,7 +91,7 @@ export function verifySignature(data: string, signature: string, publicKey: stri
         Buffer.from(expected, 'base64')
       );
     }
-  } catch (error: any) {
+  } catch {
     // Signature verification failure should not throw, just return false
     return false;
   }

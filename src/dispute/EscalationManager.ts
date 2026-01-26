@@ -7,7 +7,8 @@ import {
 import { nanoid } from 'nanoid';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as crypto from 'crypto';
+// crypto module available if needed for future escalation signing
+// import * as crypto from 'crypto';
 import axios from 'axios';
 import { logger } from '../utils/logger';
 

@@ -400,7 +400,7 @@ export const SafeIDSchema = z.string().regex(/^[a-zA-Z0-9_-]+$/, 'ID must be alp
  */
 export function sanitizeFilename(filename: string): string {
   // Remove path separators, null bytes, and other dangerous characters
-  return filename.replace(/[\/\\.\0<>:"|?*]/g, '_');
+  return filename.replace(/[/\\.\0<>:"|?*]/g, '_');
 }
 
 /**
@@ -411,6 +411,7 @@ export function sanitizeFilename(filename: string): string {
  * @returns true if path is safe
  */
 export function validatePathWithinDirectory(filePath: string, baseDir: string): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const path = require('path');
   const resolvedPath = path.resolve(filePath);
   const resolvedBase = path.resolve(baseDir);

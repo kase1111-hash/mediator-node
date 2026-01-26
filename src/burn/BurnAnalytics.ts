@@ -10,7 +10,8 @@ import {
   BurnForecast,
   UserSubmissionRecord,
 } from '../types';
-import { logger } from '../utils/logger';
+// Logger available if needed for debugging
+// import { logger } from '../utils/logger';
 
 /**
  * BurnAnalytics provides comprehensive analytics and reporting for burn data
@@ -465,11 +466,12 @@ export class BurnAnalytics {
       case 'day':
         date.setHours(0, 0, 0, 0);
         break;
-      case 'week':
+      case 'week': {
         const dayOfWeek = date.getDay();
         date.setDate(date.getDate() - dayOfWeek);
         date.setHours(0, 0, 0, 0);
         break;
+      }
       case 'month':
         date.setDate(1);
         date.setHours(0, 0, 0, 0);
