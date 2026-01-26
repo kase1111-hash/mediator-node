@@ -2,9 +2,6 @@ import {
   MediatorConfig,
   ScopeViolation,
   ViolationType,
-  License,
-  DelegationGrant,
-  DelegatedAction,
 } from '../types';
 import { nanoid } from 'nanoid';
 import * as fs from 'fs';

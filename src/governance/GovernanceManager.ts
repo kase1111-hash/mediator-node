@@ -7,7 +7,6 @@ import {
   GovernanceConfig,
   GovernanceProposalSubmissionResult,
   GovernanceVoteSubmissionResult,
-  GovernableParameters,
 } from '../types';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';

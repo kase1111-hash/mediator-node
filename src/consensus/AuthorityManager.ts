@@ -1,7 +1,8 @@
 import axios from 'axios';
 import { MediatorConfig } from '../types';
 import { logger } from '../utils/logger';
-import { verifySignature } from '../utils/crypto';
+// verifySignature available for future authority verification
+// import { verifySignature } from '../utils/crypto';
 
 /**
  * AuthorityManager handles PoA (Proof-of-Authority) operations

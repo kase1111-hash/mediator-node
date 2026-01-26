@@ -343,6 +343,7 @@ export class HealthMonitor {
   private getVersion(): string {
     try {
       // Try to read from package.json
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pkg = require('../../package.json');
       return pkg.version || '1.0.0';
     } catch {

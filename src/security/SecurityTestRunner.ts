@@ -256,6 +256,7 @@ export class SecurityTestRunner {
         test: async () => {
           const withControl = 'Normal\x00text\x1Fwith\x7Fcontrol';
           const sanitized = sanitizeForPrompt(withControl);
+          // eslint-disable-next-line no-control-regex
           const hasControl = /[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/.test(sanitized);
           return {
             passed: hasControl === false,
@@ -313,6 +314,7 @@ export class SecurityTestRunner {
         name: 'Verify SHA-256 usage for hashing',
         category: 'cryptography',
         test: async () => {
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
           const crypto = require('crypto');
           const hash = crypto.createHash('sha256').update('test').digest('hex');
           return {

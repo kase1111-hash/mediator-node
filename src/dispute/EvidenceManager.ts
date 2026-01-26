@@ -1,10 +1,6 @@
 import {
   MediatorConfig,
   ContestedItem,
-  DisputeDeclaration,
-  Intent,
-  ProposedSettlement,
-  EffortReceipt,
 } from '../types';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -13,7 +9,6 @@ import { logger } from '../utils/logger';
 import { z } from 'zod';
 import {
   FrozenItemSchema,
-  EvidenceItemSchema,
   readAllJSONFiles,
   writeJSONFile,
   buildSafeFilePath,
@@ -229,7 +224,7 @@ export class EvidenceManager {
   /**
    * Check if mutation is allowed for an item
    */
-  public canMutateItem(itemId: string, operationType: 'update' | 'delete'): {
+  public canMutateItem(itemId: string, _operationType: 'update' | 'delete'): {
     allowed: boolean;
     reason?: string;
     disputeId?: string;
@@ -298,7 +293,7 @@ export class EvidenceManager {
   public unfreezeItemsForDispute(disputeId: string): number {
     let unfrozenCount = 0;
 
-    for (const [itemId, frozenItem] of this.frozenItems.entries()) {
+    for (const frozenItem of this.frozenItems.values()) {
       if (frozenItem.disputeId === disputeId && frozenItem.status === 'under_dispute') {
         frozenItem.status = 'dispute_resolved';
         this.saveFrozenItem(frozenItem);

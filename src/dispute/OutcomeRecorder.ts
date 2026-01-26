@@ -1,7 +1,6 @@
 import {
   MediatorConfig,
   DisputeResolution,
-  DisputeDeclaration,
 } from '../types';
 import { nanoid } from 'nanoid';
 import * as fs from 'fs';
@@ -557,8 +556,8 @@ export class OutcomeRecorder {
     };
 
     let immutableCount = 0;
-    let totalResolutionTime = 0;
-    let resolutionTimeCount = 0;
+    // Note: Resolution time tracking would need dispute creation timestamps
+    // which are not available at this level.
 
     for (const outcome of this.outcomes.values()) {
       outcomesByType[outcome.outcome]++;

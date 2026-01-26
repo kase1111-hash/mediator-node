@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { Stake, Delegation, MediatorConfig } from '../types';
+import { Stake, MediatorConfig } from '../types';
 import { logger } from '../utils/logger';
 
 /**

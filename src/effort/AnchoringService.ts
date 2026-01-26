@@ -1,7 +1,8 @@
 import { EffortReceipt, ReceiptVerification, MediatorConfig } from '../types';
 import { ReceiptManager } from './ReceiptManager';
 import axios from 'axios';
-import * as crypto from 'crypto';
+// crypto module available if needed for future receipt hashing
+// import * as crypto from 'crypto';
 import { logger } from '../utils/logger';
 
 /**

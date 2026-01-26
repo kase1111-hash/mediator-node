@@ -375,40 +375,36 @@ export class MultiChainOrchestrator extends EventEmitter {
    * Sync a single chain
    */
   private async syncChain(chain: ChainConfig): Promise<void> {
-    try {
-      const response = await axios.get(`${chain.endpoint}/api/v1/intents?status=pending`, {
-        timeout: 10000,
-      });
+    const response = await axios.get(`${chain.endpoint}/api/v1/intents?status=pending`, {
+      timeout: 10000,
+    });
 
-      const intents: Intent[] = response.data.intents || [];
+    const intents: Intent[] = response.data.intents || [];
 
-      // Convert to cross-chain intents
-      for (const intent of intents) {
-        const crossChainIntent: CrossChainIntent = {
-          ...intent,
-          sourceChain: chain.chainId,
-          crossChainBridgeable: true, // Default to true
-        };
+    // Convert to cross-chain intents
+    for (const intent of intents) {
+      const crossChainIntent: CrossChainIntent = {
+        ...intent,
+        sourceChain: chain.chainId,
+        crossChainBridgeable: true, // Default to true
+      };
 
-        this.crossChainIntents.set(intent.hash, crossChainIntent);
-      }
-
-      // Update sync status
-      const status = this.chainStatuses.get(chain.chainId);
-      if (status) {
-        status.lastSyncTime = Date.now();
-        status.syncedIntents = intents.length;
-        status.isHealthy = true;
-        status.lag = 0;
-      }
-
-      logger.debug('Chain synced successfully', {
-        chainId: chain.chainId,
-        intentsSynced: intents.length,
-      });
-    } catch (error: any) {
-      throw error;
+      this.crossChainIntents.set(intent.hash, crossChainIntent);
     }
+
+    // Update sync status
+    const status = this.chainStatuses.get(chain.chainId);
+    if (status) {
+      status.lastSyncTime = Date.now();
+      status.syncedIntents = intents.length;
+      status.isHealthy = true;
+      status.lag = 0;
+    }
+
+    logger.debug('Chain synced successfully', {
+      chainId: chain.chainId,
+      intentsSynced: intents.length,
+    });
   }
 
   /**
@@ -427,7 +423,7 @@ export class MultiChainOrchestrator extends EventEmitter {
         if (status) {
           status.isHealthy = response.status === 200;
         }
-      } catch (error) {
+      } catch {
         const status = this.chainStatuses.get(chain.chainId);
         if (status) {
           status.isHealthy = false;

@@ -10,8 +10,8 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
-import { SecurityTestSuiteResult, SecurityTestResult } from './SecurityTestRunner';
-import { ScanResult, VulnerabilityFinding, VulnerabilitySeverity } from './VulnerabilityScanner';
+import { SecurityTestSuiteResult } from './SecurityTestRunner';
+import { ScanResult } from './VulnerabilityScanner';
 import { logger } from '../utils/logger';
 
 /**
@@ -255,7 +255,7 @@ export class SecurityReportGenerator {
   /**
    * Generate JSON report
    */
-  private generateJSONReport(report: SecurityReport, options: ReportOptions): string {
+  private generateJSONReport(report: SecurityReport, _options: ReportOptions): string {
     return JSON.stringify(report, null, 2);
   }
 
@@ -378,7 +378,7 @@ export class SecurityReportGenerator {
   /**
    * Generate HTML report
    */
-  private generateHTMLReport(report: SecurityReport, options: ReportOptions): string {
+  private generateHTMLReport(report: SecurityReport, _options: ReportOptions): string {
     const riskColors: Record<SecurityReport['riskLevel'], string> = {
       critical: '#dc3545',
       high: '#fd7e14',

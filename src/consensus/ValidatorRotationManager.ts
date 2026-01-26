@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { randomBytes } from 'crypto';
-import { MediatorConfig, Stake } from '../types';
+import { MediatorConfig } from '../types';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';
 

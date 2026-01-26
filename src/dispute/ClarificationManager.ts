@@ -1,7 +1,6 @@
 import {
   MediatorConfig,
   ClarificationRecord,
-  DisputeDeclaration,
 } from '../types';
 import { LLMProvider } from '../llm/LLMProvider';
 import { nanoid } from 'nanoid';

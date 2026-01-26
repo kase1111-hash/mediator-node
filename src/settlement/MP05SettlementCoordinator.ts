@@ -265,7 +265,6 @@ export class MP05SettlementCoordinator {
 
         // Step 5: Optionally generate interface
         if (params.generateInterface) {
-          const settlement = this.settlementManager.getSettlement(settlementId)!;
           const interfaceResult = this.capitalizationManager.generateCapitalizationInterface({
             settlementId,
             eventId: eventId!,
