@@ -7,9 +7,9 @@ import axios from 'axios';
 import { MediatorNode } from '../../src/MediatorNode';
 import { MediatorConfig } from '../../src/types';
 
-// Mock dependencies
+// Mock axios
 jest.mock('axios');
-const mockAxios = axios as jest.Mocked<typeof axios>;
+const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -70,6 +70,23 @@ describe('Burn Workflow Integration', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
 
+    // Create mock axios instance with interceptors
+    const mockedAxiosInstance = {
+      get: jest.fn().mockResolvedValue({ data: { intents: [] } }),
+      post: jest.fn().mockResolvedValue({ status: 200, data: {} }),
+      put: jest.fn(),
+      delete: jest.fn(),
+      interceptors: {
+        request: { use: jest.fn() },
+        response: { use: jest.fn() },
+      },
+    };
+
+    mockedAxios.create.mockReturnValue(mockedAxiosInstance as any);
+    mockedAxios.get.mockResolvedValue({ data: { intents: [] } } as any);
+    mockedAxios.post.mockResolvedValue({ status: 200, data: {} } as any);
+    (mockedAxios as any).isAxiosError = jest.fn().mockReturnValue(false);
+
     // Reset fs mocks
     mockFs.existsSync.mockReturnValue(false);
     mockFs.mkdirSync.mockImplementation(() => undefined);
@@ -101,9 +118,6 @@ describe('Burn Workflow Integration', () => {
       maxLoadMultiplier: 10,
     };
 
-    mockAxios.get.mockResolvedValue({ data: { intents: [] } });
-    mockAxios.post.mockResolvedValue({ status: 200, data: {} });
-
     mediatorNode = new MediatorNode(config);
   });
 
@@ -129,7 +143,7 @@ describe('Burn Workflow Integration', () => {
     });
 
     it('should include burn statistics in node status', async () => {
-      mockAxios.get.mockImplementation((url: string) => {
+      mockedAxios.get.mockImplementation((url: string) => {
         if (url.includes('/reputation/')) {
           return Promise.resolve({
             data: {
@@ -157,10 +171,8 @@ describe('Burn Workflow Integration', () => {
     it('should execute filing burns via BurnManager', async () => {
       const burnManager = mediatorNode.getBurnManager();
 
-      mockAxios.post.mockResolvedValue({
-        status: 200,
-        data: { transactionHash: 'tx_123' },
-      });
+      // Get the mock axios instance that was created
+      const mockAxiosInstance = mockedAxios.create.mock.results[0]?.value;
 
       // First submission (free)
       await burnManager.executeFilingBurn('user1', 'intent_hash_1');
@@ -172,9 +184,9 @@ describe('Burn Workflow Integration', () => {
       expect(result?.type).toBe('base_filing');
       expect(result?.amount).toBe(20); // 10 × 2^1
 
-      // Verify burn transaction was submitted to chain
-      expect(mockAxios.post).toHaveBeenCalledWith(
-        'http://test-chain:8080/api/v1/burns',
+      // Verify burn transaction was submitted to chain via the axios instance
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/burn/execute',
         expect.objectContaining({
           type: 'base_filing',
           author: 'user1',
@@ -186,7 +198,7 @@ describe('Burn Workflow Integration', () => {
     it('should track multiple users independently', async () => {
       const burnManager = mediatorNode.getBurnManager();
 
-      mockAxios.post.mockResolvedValue({
+      mockedAxios.post.mockResolvedValue({
         status: 200,
         data: { transactionHash: 'tx_123' },
       });
@@ -213,7 +225,7 @@ describe('Burn Workflow Integration', () => {
     it('should calculate burn preview before execution', async () => {
       const burnManager = mediatorNode.getBurnManager();
 
-      mockAxios.post.mockResolvedValue({
+      mockedAxios.post.mockResolvedValue({
         status: 200,
         data: { transactionHash: 'tx_123' },
       });
@@ -241,7 +253,7 @@ describe('Burn Workflow Integration', () => {
     it('should handle success burns on settlement closure', async () => {
       const burnManager = mediatorNode.getBurnManager();
 
-      mockAxios.post.mockResolvedValue({
+      mockedAxios.post.mockResolvedValue({
         status: 200,
         data: { transactionHash: 'tx_success' },
       });
@@ -269,7 +281,7 @@ describe('Burn Workflow Integration', () => {
       const node = new MediatorNode(customConfig);
       const burnManager = node.getBurnManager();
 
-      mockAxios.post.mockResolvedValue({
+      mockedAxios.post.mockResolvedValue({
         status: 200,
         data: { transactionHash: 'tx_123' },
       });
@@ -293,7 +305,7 @@ describe('Burn Workflow Integration', () => {
     it('should expose comprehensive burn statistics', async () => {
       const burnManager = mediatorNode.getBurnManager();
 
-      mockAxios.post.mockResolvedValue({
+      mockedAxios.post.mockResolvedValue({
         status: 200,
         data: { transactionHash: 'tx_123' },
       });
