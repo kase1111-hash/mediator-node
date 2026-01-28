@@ -27,6 +27,7 @@ describe('EventPublisher', () => {
     server = new WebSocketServer({
       port: testPort,
       authRequired: false,
+      allowedOrigins: ['*'], // Allow all origins in tests
     });
 
     await server.start();

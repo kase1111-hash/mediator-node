@@ -19,6 +19,7 @@ describe('WebSocketServer', () => {
       port: testPort,
       authRequired: false,
       heartbeatInterval: 5000,
+      allowedOrigins: ['*'], // Allow all origins in tests
     });
 
     await server.start();
@@ -100,6 +101,7 @@ describe('WebSocketServer', () => {
         port: testPort,
         authRequired: false,
         maxConnections: 2,
+        allowedOrigins: ['*'], // Allow all origins in tests
       });
 
       await server.start();
@@ -126,6 +128,7 @@ describe('WebSocketServer', () => {
         port: testPort,
         authRequired: true,
         authTimeout: 2000,
+        allowedOrigins: ['*'], // Allow all origins in tests
       });
 
       await server.start();

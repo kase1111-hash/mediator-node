@@ -29,6 +29,16 @@ import axios from 'axios';
 jest.mock('axios');
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+// Create mock axios instance that will be returned by axios.create
+const mockAxiosInstance = {
+  get: jest.fn().mockResolvedValue({ data: {} }),
+  post: jest.fn().mockResolvedValue({ status: 200, data: {} }),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() },
+  },
+};
+
 // Mock logger
 jest.mock('../../../src/utils/logger', () => ({
   logger: {
@@ -56,6 +66,10 @@ describe('IntentIngester', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Setup axios mock
+    mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosInstance.get.mockResolvedValue({ data: {} });
+    mockAxiosInstance.post.mockResolvedValue({ status: 200, data: {} });
 
     // Reset fs mocks
     mockFs.existsSync.mockReturnValue(false);
