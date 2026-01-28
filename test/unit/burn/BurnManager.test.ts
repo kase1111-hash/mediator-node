@@ -6,9 +6,19 @@ import axios from 'axios';
 import { BurnManager } from '../../../src/burn/BurnManager';
 import { MediatorConfig } from '../../../src/types';
 
-// Mock dependencies
+// Mock axios
 jest.mock('axios');
 const mockAxios = axios as jest.Mocked<typeof axios>;
+
+// Create mock axios instance that will be returned by axios.create
+const mockAxiosInstance = {
+  get: jest.fn().mockResolvedValue({ data: {} }),
+  post: jest.fn().mockResolvedValue({ status: 200, data: {} }),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() },
+  },
+};
 
 jest.mock('../../../src/utils/logger', () => ({
   logger: {
@@ -37,6 +47,11 @@ describe('BurnManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    // Setup axios mock
+    mockAxios.create.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosInstance.get.mockResolvedValue({ data: {} });
+    mockAxiosInstance.post.mockResolvedValue({ status: 200, data: {} });
 
     // Reset fs mocks
     mockFs.existsSync.mockReturnValue(false);

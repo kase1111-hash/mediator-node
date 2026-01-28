@@ -25,6 +25,7 @@ describe('MonitoringPublisher', () => {
     wsServer = new WebSocketServer({
       port: 8081,
       authRequired: false,
+      allowedOrigins: ['*'], // Allow all origins in tests
     });
 
     // Create monitoring components

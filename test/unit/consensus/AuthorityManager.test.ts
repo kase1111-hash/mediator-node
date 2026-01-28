@@ -7,6 +7,16 @@ import { createMockConfig } from '../../utils/testUtils';
 jest.mock('axios');
 const mockAxios = axios as jest.Mocked<typeof axios>;
 
+// Create mock axios instance that will be returned by axios.create
+const mockAxiosInstance = {
+  get: jest.fn().mockResolvedValue({ data: {} }),
+  post: jest.fn().mockResolvedValue({ status: 200, data: {} }),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() },
+  },
+};
+
 // Mock crypto utilities
 jest.mock('../../../src/utils/crypto', () => ({
   verifySignature: jest.fn((data: string, signature: string, publicKey: string) => {
@@ -30,6 +40,10 @@ describe('AuthorityManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Setup axios mock
+    mockAxios.create.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosInstance.get.mockResolvedValue({ data: {} });
+    mockAxiosInstance.post.mockResolvedValue({ status: 200, data: {} });
     config = createMockConfig({
       mediatorPublicKey: 'mediator_pub_key_123',
       chainEndpoint: 'https://chain.example.com',

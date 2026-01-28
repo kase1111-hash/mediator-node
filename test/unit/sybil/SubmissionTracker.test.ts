@@ -7,6 +7,18 @@ import * as path from 'path';
 jest.mock('axios');
 jest.mock('fs');
 
+const mockAxios = axios as jest.Mocked<typeof axios>;
+
+// Create mock axios instance that will be returned by axios.create
+const mockAxiosInstance = {
+  get: jest.fn().mockResolvedValue({ data: {} }),
+  post: jest.fn().mockResolvedValue({ status: 200, data: {} }),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() },
+  },
+};
+
 describe('SubmissionTracker', () => {
   let tracker: SubmissionTracker;
   let mockConfig: MediatorConfig;
@@ -14,6 +26,10 @@ describe('SubmissionTracker', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Setup axios mock
+    mockAxios.create.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosInstance.get.mockResolvedValue({ data: {} });
+    mockAxiosInstance.post.mockResolvedValue({ status: 200, data: {} });
 
     // Mock file system
     (fs.existsSync as jest.Mock).mockReturnValue(false);

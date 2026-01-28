@@ -26,6 +26,19 @@ jest.mock('fs', () => ({
 
 jest.mock('axios');
 
+import axios from 'axios';
+const mockAxios = axios as jest.Mocked<typeof axios>;
+
+// Create mock axios instance that will be returned by axios.create
+const mockAxiosInstance = {
+  get: jest.fn().mockResolvedValue({ data: {} }),
+  post: jest.fn().mockResolvedValue({ status: 200, data: {} }),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() },
+  },
+};
+
 import * as fs from 'fs';
 const mockFs = fs as jest.Mocked<typeof fs>;
 
@@ -36,6 +49,10 @@ describe('LoadMonitor', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Setup axios mock
+    mockAxios.create.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosInstance.get.mockResolvedValue({ data: {} });
+    mockAxiosInstance.post.mockResolvedValue({ status: 200, data: {} });
     jest.useFakeTimers();
 
     // Reset fs mocks

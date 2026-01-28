@@ -13,6 +13,16 @@ jest.mock('../../../src/reputation/ReputationTracker');
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
+// Create mock axios instance that will be returned by axios.create
+const mockAxiosInstance = {
+  get: jest.fn().mockResolvedValue({ data: {} }),
+  post: jest.fn().mockResolvedValue({ status: 200, data: {} }),
+  interceptors: {
+    request: { use: jest.fn() },
+    response: { use: jest.fn() },
+  },
+};
+
 describe('ChallengeManager', () => {
   let challengeManager: ChallengeManager;
   let mockConfig: MediatorConfig;
@@ -22,6 +32,10 @@ describe('ChallengeManager', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Setup axios mock
+    mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosInstance.get.mockResolvedValue({ data: {} });
+    mockAxiosInstance.post.mockResolvedValue({ status: 200, data: {} });
 
     mockConfig = {
       chainEndpoint: 'https://test-chain.example.com',
