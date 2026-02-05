@@ -864,6 +864,13 @@ export interface MediatorConfig {
   embeddingApiKey?: string; // API key for external embedding provider (if different from LLM key)
   embeddingModel?: string; // Model name for embedding provider
 
+  // Negotiation thresholds
+  minNegotiationConfidence?: number; // Minimum LLM confidence score for successful negotiation 0-100 (default: 60)
+
+  // Intent validation thresholds
+  maxIntentFlags?: number; // Maximum flags before intent is marked unalignable (default: 5)
+  minIntentProseLength?: number; // Minimum prose length for valid intent in characters (default: 50)
+
   // Monitoring & Analytics configuration
   enableMonitoring?: boolean; // Enable health and performance monitoring (default: true)
   monitoringHealthCheckInterval?: number; // Health check interval in ms (default: 30000)

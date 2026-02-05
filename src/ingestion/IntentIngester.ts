@@ -170,14 +170,16 @@ export class IntentIngester {
    */
   private isUnalignable(intent: Intent): boolean {
     const flagCount = intent.flagCount || 0;
-    const maxFlags = 5; // As per spec
+    // Use configurable max flags (default: 5 as per MP-01 spec)
+    const maxFlags = this.config.maxIntentFlags ?? 5;
 
     if (flagCount >= maxFlags) {
       return true;
     }
 
-    // Check for vagueness
-    if (intent.prose.length < 50 || !intent.prose.includes(' ')) {
+    // Check for vagueness using configurable minimum prose length (default: 50)
+    const minProseLength = this.config.minIntentProseLength ?? 50;
+    if (intent.prose.length < minProseLength || !intent.prose.includes(' ')) {
       return true;
     }
 

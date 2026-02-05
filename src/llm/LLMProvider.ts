@@ -412,8 +412,11 @@ Provide your analysis now:`,
         }
       }
 
+      // Use configurable confidence threshold (default: 60)
+      const minConfidence = this.config.minNegotiationConfidence ?? 60;
+
       return {
-        success: success && confidence >= 60,
+        success: success && confidence >= minConfidence,
         reasoning,
         proposedTerms,
         confidenceScore: confidence,

@@ -73,6 +73,13 @@ export class ConfigLoader {
       embeddingApiKey: this.getOptional('EMBEDDING_API_KEY'),
       embeddingModel: this.getOptional('EMBEDDING_MODEL'),
 
+      // Negotiation thresholds
+      minNegotiationConfidence: this.getOptionalNumber('MIN_NEGOTIATION_CONFIDENCE'),
+
+      // Intent validation thresholds
+      maxIntentFlags: this.getOptionalNumber('MAX_INTENT_FLAGS'),
+      minIntentProseLength: this.getOptionalNumber('MIN_INTENT_PROSE_LENGTH'),
+
       // LoadMonitor configuration
       targetIntentRate: this.getOptionalNumber('TARGET_INTENT_RATE'),
       maxIntentRate: this.getOptionalNumber('MAX_INTENT_RATE'),

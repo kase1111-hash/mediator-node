@@ -147,6 +147,11 @@ Key configuration variables:
 - `INTENT_POLLING_INTERVAL_MS`: Intent polling interval (default: 10000ms)
 - `SETTLEMENT_MONITORING_INTERVAL_MS`: Settlement monitoring interval (default: 60000ms)
 
+**Threshold Configuration** (optional):
+- `MIN_NEGOTIATION_CONFIDENCE`: Minimum LLM confidence score 0-100 (default: 60)
+- `MAX_INTENT_FLAGS`: Maximum flags before intent is unalignable (default: 5)
+- `MIN_INTENT_PROSE_LENGTH`: Minimum prose length in characters (default: 50)
+
 5. **Build the project**
 ```bash
 npm run build
