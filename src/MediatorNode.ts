@@ -273,7 +273,9 @@ export class MediatorNode {
       }
 
       // Start intent ingestion
-      this.ingester.startPolling(10000); // Poll every 10 seconds
+      const intentPollingInterval = this.config.intentPollingIntervalMs || 10000;
+      this.ingester.startPolling(intentPollingInterval);
+      logger.info('Intent polling started', { intervalMs: intentPollingInterval });
 
       // Start alignment cycle
       this.isRunning = true;
@@ -518,7 +520,10 @@ export class MediatorNode {
    * Run the alignment cycle
    */
   private async runAlignmentCycle(): Promise<void> {
-    // Run cycle every 30 seconds
+    // Run cycle at configured interval (default: 30 seconds)
+    const alignmentCycleInterval = this.config.alignmentCycleIntervalMs || 30000;
+    logger.info('Starting alignment cycle', { intervalMs: alignmentCycleInterval });
+
     this.cycleInterval = setInterval(async () => {
       if (!this.isRunning) return;
 
@@ -530,7 +535,7 @@ export class MediatorNode {
           stack: error instanceof Error ? error.stack : undefined,
         });
       }
-    }, 30000);
+    }, alignmentCycleInterval);
 
     // Run initial cycle
     await this.executeAlignmentCycle();
@@ -656,6 +661,9 @@ export class MediatorNode {
    * Start monitoring settlements for acceptance/closure
    */
   private startSettlementMonitoring(): void {
+    const settlementMonitoringInterval = this.config.settlementMonitoringIntervalMs || 60000;
+    logger.info('Starting settlement monitoring', { intervalMs: settlementMonitoringInterval });
+
     setInterval(async () => {
       if (!this.isRunning) return;
 
@@ -667,7 +675,7 @@ export class MediatorNode {
           stack: error instanceof Error ? error.stack : undefined,
         });
       }
-    }, 60000); // Check every minute
+    }, settlementMonitoringInterval);
   }
 
   /**

@@ -854,6 +854,16 @@ export interface MediatorConfig {
   webSocketHeartbeatInterval?: number; // Heartbeat interval in ms (default: 30000)
   webSocketAllowedOrigins?: string[]; // Allowed CORS origins (default: ['*'] - configure for production!)
 
+  // Core timing intervals (alignment cycle)
+  alignmentCycleIntervalMs?: number; // Alignment cycle interval in ms (default: 30000)
+  intentPollingIntervalMs?: number; // Intent polling interval in ms (default: 10000)
+  settlementMonitoringIntervalMs?: number; // Settlement monitoring interval in ms (default: 60000)
+
+  // Embedding configuration
+  embeddingProvider?: 'openai' | 'voyage' | 'cohere' | 'fallback'; // Embedding provider for Anthropic users (default: 'fallback' - WARNING: development only)
+  embeddingApiKey?: string; // API key for external embedding provider (if different from LLM key)
+  embeddingModel?: string; // Model name for embedding provider
+
   // Monitoring & Analytics configuration
   enableMonitoring?: boolean; // Enable health and performance monitoring (default: true)
   monitoringHealthCheckInterval?: number; // Health check interval in ms (default: 30000)

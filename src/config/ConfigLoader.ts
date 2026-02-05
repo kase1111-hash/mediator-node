@@ -63,6 +63,16 @@ export class ConfigLoader {
       maxLoadMultiplier: this.getOptionalNumber('MAX_LOAD_MULTIPLIER'),
       enableBurnPreview: this.getOptional('ENABLE_BURN_PREVIEW', 'true') === 'true',
 
+      // Core timing intervals (alignment cycle)
+      alignmentCycleIntervalMs: this.getOptionalNumber('ALIGNMENT_CYCLE_INTERVAL_MS'),
+      intentPollingIntervalMs: this.getOptionalNumber('INTENT_POLLING_INTERVAL_MS'),
+      settlementMonitoringIntervalMs: this.getOptionalNumber('SETTLEMENT_MONITORING_INTERVAL_MS'),
+
+      // Embedding configuration (for Anthropic users or custom embedding providers)
+      embeddingProvider: this.getEmbeddingProvider(),
+      embeddingApiKey: this.getOptional('EMBEDDING_API_KEY'),
+      embeddingModel: this.getOptional('EMBEDDING_MODEL'),
+
       // LoadMonitor configuration
       targetIntentRate: this.getOptionalNumber('TARGET_INTENT_RATE'),
       maxIntentRate: this.getOptionalNumber('MAX_INTENT_RATE'),
@@ -199,6 +209,30 @@ export class ConfigLoader {
   }
 
   /**
+   * Get embedding provider
+   *
+   * For Anthropic LLM users, a separate embedding provider is required since
+   * Anthropic does not provide embeddings. Options:
+   * - 'openai': Use OpenAI's text-embedding-3-small (recommended)
+   * - 'voyage': Use Voyage AI embeddings (optimized for semantic search)
+   * - 'cohere': Use Cohere embeddings
+   * - 'fallback': Character-based fallback (DEVELOPMENT ONLY - not suitable for production)
+   */
+  private static getEmbeddingProvider(): 'openai' | 'voyage' | 'cohere' | 'fallback' | undefined {
+    const provider = this.getOptional('EMBEDDING_PROVIDER');
+
+    if (!provider) {
+      return undefined; // Will use LLM provider's default or fallback
+    }
+
+    if (!['openai', 'voyage', 'cohere', 'fallback'].includes(provider)) {
+      throw new Error(`Invalid embedding provider: ${provider}. Valid options: openai, voyage, cohere, fallback`);
+    }
+
+    return provider as 'openai' | 'voyage' | 'cohere' | 'fallback';
+  }
+
+  /**
    * Validate configuration
    */
   private static validateConfig(config: MediatorConfig): void {
@@ -219,6 +253,24 @@ export class ConfigLoader {
     // Validate fee percentage
     if (config.facilitationFeePercent < 0 || config.facilitationFeePercent > 100) {
       throw new Error('Facilitation fee must be between 0 and 100');
+    }
+
+    // Validate embedding configuration for Anthropic users
+    if (config.llmProvider === 'anthropic') {
+      const embeddingProvider = config.embeddingProvider;
+      if (!embeddingProvider || embeddingProvider === 'fallback') {
+        logger.warn(
+          '⚠️  PRODUCTION WARNING: Anthropic does not provide embeddings. ' +
+          'Using character-based fallback which is NOT suitable for production semantic matching. ' +
+          'Configure EMBEDDING_PROVIDER (openai, voyage, or cohere) and EMBEDDING_API_KEY for production use.'
+        );
+      } else if (!config.embeddingApiKey) {
+        // embeddingProvider is set to openai, voyage, or cohere - may need API key
+        logger.warn(
+          `EMBEDDING_PROVIDER=${embeddingProvider} but EMBEDDING_API_KEY not set. ` +
+          'Embedding provider may fail if it requires a separate API key.'
+        );
+      }
     }
 
     // Validate vector dimensions
