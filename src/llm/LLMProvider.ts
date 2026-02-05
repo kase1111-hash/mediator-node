@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import axios from 'axios';
 import { MediatorConfig, Intent, NegotiationResult } from '../types';
 import { logger } from '../utils/logger';
 import { generateModelIntegrityHash } from '../utils/crypto';
@@ -7,12 +8,33 @@ import { sanitizeIntentForLLM, buildStructuredPrompt } from '../utils/prompt-sec
 
 /**
  * LLMProvider handles interactions with language models for
- * negotiation, embedding generation, and semantic analysis
+ * negotiation, embedding generation, and semantic analysis.
+ *
+ * ## Embedding Provider Configuration
+ *
+ * When using Anthropic as the LLM provider, a separate embedding provider is required
+ * since Anthropic does not offer an embeddings API. Configure via environment variables:
+ *
+ * - `EMBEDDING_PROVIDER`: 'openai' | 'voyage' | 'cohere' | 'fallback'
+ * - `EMBEDDING_API_KEY`: API key for the embedding provider (if different from LLM key)
+ * - `EMBEDDING_MODEL`: Model name to use (provider-specific)
+ *
+ * ### Recommended Embedding Providers:
+ * - **OpenAI** (default for production): `text-embedding-3-small` or `text-embedding-3-large`
+ * - **Voyage AI**: Optimized for semantic search, excellent for intent matching
+ * - **Cohere**: `embed-english-v3.0` or `embed-multilingual-v3.0`
+ *
+ * ### ⚠️ PRODUCTION WARNING
+ * The 'fallback' embedding provider uses a naive character-based algorithm that is
+ * **NOT suitable for production**. It will produce poor semantic matching results.
+ * Always configure a proper embedding provider for production deployments.
  */
 export class LLMProvider {
   private config: MediatorConfig;
   private anthropic?: Anthropic;
   private openai?: OpenAI;
+  private embeddingOpenAI?: OpenAI;
+  private fallbackWarningShown: boolean = false;
 
   constructor(config: MediatorConfig) {
     this.config = config;
@@ -21,6 +43,9 @@ export class LLMProvider {
       this.anthropic = new Anthropic({
         apiKey: config.llmApiKey,
       });
+
+      // Initialize embedding provider for Anthropic users
+      this.initializeEmbeddingProvider(config);
     } else if (config.llmProvider === 'openai') {
       this.openai = new OpenAI({
         apiKey: config.llmApiKey,
@@ -29,33 +54,172 @@ export class LLMProvider {
   }
 
   /**
-   * Generate embeddings for an intent
+   * Initialize embedding provider for non-OpenAI LLM configurations.
+   * This is necessary because Anthropic does not provide an embeddings API.
+   */
+  private initializeEmbeddingProvider(config: MediatorConfig): void {
+    const embeddingProvider = config.embeddingProvider || 'fallback';
+    const embeddingApiKey = config.embeddingApiKey || config.llmApiKey;
+
+    if (embeddingProvider === 'openai') {
+      this.embeddingOpenAI = new OpenAI({
+        apiKey: embeddingApiKey,
+      });
+      logger.info('Using OpenAI for embeddings', {
+        model: config.embeddingModel || 'text-embedding-3-small',
+      });
+    } else if (embeddingProvider === 'voyage') {
+      // Voyage uses OpenAI-compatible API format
+      this.embeddingOpenAI = new OpenAI({
+        apiKey: embeddingApiKey,
+        baseURL: 'https://api.voyageai.com/v1',
+      });
+      logger.info('Using Voyage AI for embeddings', {
+        model: config.embeddingModel || 'voyage-2',
+      });
+    } else if (embeddingProvider === 'cohere') {
+      // Cohere will be handled separately in generateEmbedding
+      logger.info('Using Cohere for embeddings', {
+        model: config.embeddingModel || 'embed-english-v3.0',
+      });
+    } else {
+      // Log a prominent warning about fallback embeddings
+      logger.warn('═══════════════════════════════════════════════════════════════════');
+      logger.warn('⚠️  FALLBACK EMBEDDING PROVIDER - NOT SUITABLE FOR PRODUCTION  ⚠️');
+      logger.warn('═══════════════════════════════════════════════════════════════════');
+      logger.warn('Using character-based fallback embeddings which provide POOR');
+      logger.warn('semantic matching quality. For production deployments, configure:');
+      logger.warn('');
+      logger.warn('  EMBEDDING_PROVIDER=openai    # Recommended');
+      logger.warn('  EMBEDDING_API_KEY=sk-...     # Your OpenAI API key');
+      logger.warn('');
+      logger.warn('Or use Voyage AI / Cohere for optimized semantic search.');
+      logger.warn('═══════════════════════════════════════════════════════════════════');
+    }
+  }
+
+  /**
+   * Generate embeddings for an intent.
+   *
+   * Uses the configured embedding provider:
+   * - OpenAI users: Uses OpenAI embeddings directly
+   * - Anthropic users: Uses configured EMBEDDING_PROVIDER (openai, voyage, cohere, or fallback)
+   *
+   * @param text - Text to generate embeddings for
+   * @returns Vector embedding as number array
    */
   public async generateEmbedding(text: string): Promise<number[]> {
     try {
+      // OpenAI LLM users: use OpenAI embeddings directly
       if (this.config.llmProvider === 'openai' && this.openai) {
         const response = await this.openai.embeddings.create({
-          model: 'text-embedding-3-small',
+          model: this.config.embeddingModel || 'text-embedding-3-small',
           input: text,
         });
-
         return response.data[0].embedding;
-      } else {
-        // For Anthropic, we'll use a simple fallback (in production, use a dedicated embedding service)
-        logger.warn('Anthropic does not provide embeddings API, using fallback');
-        return this.generateFallbackEmbedding(text);
       }
+
+      // Anthropic/custom LLM users: use configured embedding provider
+      const embeddingProvider = this.config.embeddingProvider || 'fallback';
+
+      if (embeddingProvider === 'openai' && this.embeddingOpenAI) {
+        const response = await this.embeddingOpenAI.embeddings.create({
+          model: this.config.embeddingModel || 'text-embedding-3-small',
+          input: text,
+        });
+        return response.data[0].embedding;
+      }
+
+      if (embeddingProvider === 'voyage' && this.embeddingOpenAI) {
+        // Voyage AI uses OpenAI-compatible API
+        const response = await this.embeddingOpenAI.embeddings.create({
+          model: this.config.embeddingModel || 'voyage-2',
+          input: text,
+        });
+        return response.data[0].embedding;
+      }
+
+      if (embeddingProvider === 'cohere') {
+        return this.generateCohereEmbedding(text);
+      }
+
+      // Fallback: character-based embedding (DEVELOPMENT ONLY)
+      return this.generateFallbackEmbedding(text);
     } catch (error) {
-      logger.error('Error generating embedding', { error });
+      logger.error('Error generating embedding', {
+        error,
+        provider: this.config.embeddingProvider || 'fallback',
+      });
       throw error;
     }
   }
 
   /**
-   * Simple fallback embedding generator (for development only)
+   * Generate embeddings using Cohere API.
+   *
+   * @param text - Text to generate embeddings for
+   * @returns Vector embedding as number array
+   */
+  private async generateCohereEmbedding(text: string): Promise<number[]> {
+    const apiKey = this.config.embeddingApiKey || this.config.llmApiKey;
+    const model = this.config.embeddingModel || 'embed-english-v3.0';
+
+    const response = await axios.post(
+      'https://api.cohere.ai/v1/embed',
+      {
+        texts: [text],
+        model: model,
+        input_type: 'search_document',
+        truncate: 'END',
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+
+    if (response.data?.embeddings?.[0]) {
+      return response.data.embeddings[0];
+    }
+
+    throw new Error('Cohere embedding response missing embeddings data');
+  }
+
+  /**
+   * ⚠️ DEVELOPMENT ONLY - Fallback embedding generator.
+   *
+   * This is a naive character-based embedding that provides POOR semantic matching.
+   * It exists only for development/testing when no embedding API is available.
+   *
+   * ## Why this is unsuitable for production:
+   * - No semantic understanding (treats text as character sequences)
+   * - No contextual awareness (word order doesn't affect meaning)
+   * - Poor similarity detection (semantically similar texts may have distant embeddings)
+   * - Inconsistent dimensions with production embedding services
+   *
+   * ## For production, configure:
+   * ```
+   * EMBEDDING_PROVIDER=openai
+   * EMBEDDING_API_KEY=sk-your-api-key
+   * EMBEDDING_MODEL=text-embedding-3-small
+   * ```
+   *
+   * @param text - Text to generate embeddings for
+   * @returns Vector embedding as number array (WARNING: low quality)
    */
   private generateFallbackEmbedding(text: string): number[] {
-    // This is a very basic embedding - in production, use a proper service
+    // Show warning only once per session to avoid log spam
+    if (!this.fallbackWarningShown) {
+      logger.warn(
+        '⚠️ Using FALLBACK embeddings - semantic matching quality will be POOR. ' +
+        'Configure EMBEDDING_PROVIDER for production use.'
+      );
+      this.fallbackWarningShown = true;
+    }
+
+    // Naive character-based embedding (NOT production quality)
     const embedding = new Array(this.config.vectorDimensions).fill(0);
     const words = text.toLowerCase().split(/\s+/);
 
@@ -67,7 +231,7 @@ export class LLMProvider {
       }
     }
 
-    // Normalize
+    // Normalize to unit vector
     const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
     return embedding.map(val => val / (magnitude || 1));
   }
@@ -248,8 +412,11 @@ Provide your analysis now:`,
         }
       }
 
+      // Use configurable confidence threshold (default: 60)
+      const minConfidence = this.config.minNegotiationConfidence ?? 60;
+
       return {
-        success: success && confidence >= 60,
+        success: success && confidence >= minConfidence,
         reasoning,
         proposedTerms,
         confidenceScore: confidence,

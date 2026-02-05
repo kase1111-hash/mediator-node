@@ -135,6 +135,23 @@ Key configuration variables:
 - `MEDIATOR_PRIVATE_KEY`: Your mediator identity
 - `FACILITATION_FEE_PERCENT`: Fee percentage (e.g., 1.0 for 1%)
 
+**Embedding Configuration** (required for Anthropic users):
+- `EMBEDDING_PROVIDER`: openai | voyage | cohere | fallback (default: fallback)
+- `EMBEDDING_API_KEY`: API key for embedding provider (if different from LLM key)
+- `EMBEDDING_MODEL`: Model name (e.g., `text-embedding-3-small`, `voyage-2`, `embed-english-v3.0`)
+
+> ⚠️ **Production Warning**: The `fallback` embedding provider uses a naive character-based algorithm unsuitable for production semantic matching. Always configure `EMBEDDING_PROVIDER=openai` (or voyage/cohere) for production deployments.
+
+**Timing Configuration** (optional):
+- `ALIGNMENT_CYCLE_INTERVAL_MS`: Alignment cycle interval (default: 30000ms)
+- `INTENT_POLLING_INTERVAL_MS`: Intent polling interval (default: 10000ms)
+- `SETTLEMENT_MONITORING_INTERVAL_MS`: Settlement monitoring interval (default: 60000ms)
+
+**Threshold Configuration** (optional):
+- `MIN_NEGOTIATION_CONFIDENCE`: Minimum LLM confidence score 0-100 (default: 60)
+- `MAX_INTENT_FLAGS`: Maximum flags before intent is unalignable (default: 5)
+- `MIN_INTENT_PROSE_LENGTH`: Minimum prose length in characters (default: 50)
+
 5. **Build the project**
 ```bash
 npm run build
