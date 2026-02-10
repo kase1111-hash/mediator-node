@@ -73,13 +73,6 @@ describe('IntentIngester', () => {
       maxIntentsCache: 100,
       acceptanceWindowHours: 72,
       logLevel: 'info',
-      baseFilingBurn: 10,
-      freeDailySubmissions: 1,
-      burnEscalationBase: 2,
-      burnEscalationExponent: 1,
-      successBurnPercentage: 0.05,
-      loadScalingEnabled: false,
-      maxLoadMultiplier: 10,
     };
 
     ingester = new IntentIngester(config);

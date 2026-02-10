@@ -741,176 +741,63 @@ export interface UserSubmissionRecord {
  * Configuration for the mediator node
  */
 export interface MediatorConfig {
+  // Chain connection
   chainEndpoint: string;
   chainId: string;
   consensusMode: ConsensusMode;
 
+  // LLM
   llmProvider: 'anthropic' | 'openai' | 'custom';
   llmApiKey: string;
   llmModel: string;
 
+  // Identity
   mediatorPrivateKey: string;
   mediatorPublicKey: string;
   facilitationFeePercent: number;
 
+  // Consensus-mode-specific (DPoS/PoA)
   bondedStakeAmount?: number;
   minEffectiveStake?: number;
   poaAuthorityKey?: string;
 
-  // Network coordination
-  httpEndpoint?: string;
-  port?: number;
-  coordinationEndpoints?: string[];
-  additionalChains?: any[];
-  webSocketEndpoint?: string;
-
+  // Vector DB
   vectorDbPath: string;
   vectorDimensions: number;
   maxIntentsCache: number;
 
+  // Reputation
   reputationChainEndpoint?: string;
+
+  // Settlement
   acceptanceWindowHours: number;
 
-  // Burn configuration
-  baseFilingBurn?: number; // Base burn amount for intent filing
-  freeDailySubmissions?: number; // Free submissions per 24h (default: 1)
-  burnEscalationBase?: number; // Base multiplier for escalation (default: 2)
-  burnEscalationExponent?: number; // Exponent for escalation (default: 1)
-  successBurnPercentage?: number; // Percentage burn on success (default: 0.05)
-  loadScalingEnabled?: boolean; // Enable load-based scaling (default: false)
-  maxLoadMultiplier?: number; // Maximum load multiplier (default: 10)
-  enableBurnPreview?: boolean; // Show burn estimates before submission (default: true)
+  // Embedding (required for Anthropic users since Anthropic has no embeddings API)
+  embeddingProvider?: 'openai' | 'voyage' | 'cohere' | 'fallback';
+  embeddingApiKey?: string;
+  embeddingModel?: string;
 
-  // LoadMonitor configuration
-  targetIntentRate?: number; // Target intents/minute baseline (default: 10)
-  maxIntentRate?: number; // Maximum sustainable intents/minute (default: 50)
-  loadSmoothingFactor?: number; // Smoothing for gradual adjustments 0-1 (default: 0.3)
-  loadMonitoringInterval?: number; // Load check interval in ms (default: 30000)
+  // Negotiation
+  minNegotiationConfidence?: number;
 
-  // Challenge submission configuration
-  enableChallengeSubmission?: boolean; // Enable automatic challenge submission (default: false)
-  minConfidenceToChallenge?: number; // Minimum confidence to submit challenge 0-1 (default: 0.8)
-  challengeCheckInterval?: number; // How often to check for challengeable settlements in ms (default: 60000)
+  // Intent validation
+  maxIntentFlags?: number;
+  minIntentProseLength?: number;
 
-  // Semantic Consensus Verification configuration
-  enableSemanticConsensus?: boolean; // Enable semantic consensus for high-value settlements (default: false)
-  highValueThreshold?: number; // Settlement value threshold requiring verification (default: 10000)
-  verificationDeadlineHours?: number; // Hours to wait for verification responses (default: 24)
-  requiredVerifiers?: number; // Number of verifiers to select (default: 5)
-  requiredConsensus?: number; // Minimum consensus for approval (default: 3)
-  semanticSimilarityThreshold?: number; // Cosine similarity threshold for equivalence (default: 0.85)
-  participateInVerification?: boolean; // Opt-in to participate as verifier (default: true)
-  verifierSelectionTimeoutMs?: number; // Timeout for selecting verifiers (default: 10000)
-  chainRequestTimeoutMs?: number; // Timeout for chain API requests (default: 10000)
+  // Challenge system
+  enableChallengeSubmission?: boolean;
+  minConfidenceToChallenge?: number;
+  challengeCheckInterval?: number;
 
-  // Sybil Resistance configuration
-  enableSybilResistance?: boolean; // Enable daily limits and deposits (default: false)
-  dailyFreeLimit?: number; // Free intent submissions per day per author (default: 3)
-  excessDepositAmount?: number; // Deposit required for 4th+ intent (default: 100 NLC)
-  depositRefundDays?: number; // Days before deposit can be refunded (default: 30)
-  enableSpamProofSubmission?: boolean; // Allow mediators to submit spam proofs (default: false)
-  minSpamConfidence?: number; // Minimum confidence for spam classification (default: 0.9)
+  // Timing intervals
+  alignmentCycleIntervalMs?: number;
+  intentPollingIntervalMs?: number;
+  settlementMonitoringIntervalMs?: number;
 
-  // MP-02: Proof-of-Effort Receipt Protocol configuration
-  enableEffortCapture?: boolean; // Enable effort capture and receipt generation (default: false)
-  effortObserverId?: string; // Unique identifier for this observer instance
-  effortCaptureModalities?: string[]; // Modalities to capture (default: ['text_edit', 'command'])
-  effortSegmentationStrategy?: 'time_window' | 'activity_boundary' | 'hybrid'; // (default: 'time_window')
-  effortTimeWindowMinutes?: number; // Time window for segmentation (default: 30)
-  effortActivityGapMinutes?: number; // Activity gap for boundary detection (default: 10)
-  effortAutoAnchor?: boolean; // Auto-anchor receipts to chain (default: true)
-  effortEncryptSignals?: boolean; // Encrypt raw signals at rest (default: true)
-  effortRetentionDays?: number; // Signal retention period (default: 90, 0 = indefinite)
+  // Health server
+  healthServerPort?: number;
 
-  // MP-03: Dispute & Escalation Protocol configuration
-  enableDisputeSystem?: boolean; // Enable dispute declaration and handling (default: false)
-  allowDisputeClarification?: boolean; // Allow mediator-assisted clarification (default: true)
-  autoFreezeEvidence?: boolean; // Auto-freeze contested items (default: true)
-  maxClarificationDays?: number; // Max days for clarification phase (default: 14)
-  requireHumanEscalation?: boolean; // Require human authorship for escalations (default: true)
-
-  // MP-04: Licensing & Delegation Protocol configuration
-  enableLicensingSystem?: boolean; // Enable licensing and delegation (default: false)
-  requireHumanRatification?: boolean; // Require human authorship for ratification (default: true)
-  defaultLicenseDuration?: number; // Default license duration in days (default: 365)
-  maxDelegationDepth?: number; // Maximum redelegation depth (default: 3)
-  autoExpireCheck?: boolean; // Auto-check and expire licenses/delegations (default: true)
-  enableViolationTracking?: boolean; // Track scope violations (default: true)
-
-  // MP-05: Settlement & Capitalization Interface configuration
-  enableSettlementSystem?: boolean; // Enable settlement and capitalization (default: false)
-  requireMutualSettlement?: boolean; // Require all parties to declare (default: true)
-  allowPartialSettlement?: boolean; // Allow staged/milestone settlements (default: true)
-  enableCapitalization?: boolean; // Enable capitalization events (default: false)
-  enableRiskTracking?: boolean; // Track settlement risks (default: true)
-  autoValidatePreconditions?: boolean; // Auto-check MP-01/02/03/04 preconditions (default: true)
-
-  // WebSocket Real-Time Updates configuration
-  enableWebSocket?: boolean; // Enable WebSocket server for real-time events (default: false)
-  webSocketPort?: number; // Port for WebSocket server (default: 8080)
-  webSocketHost?: string; // Host for WebSocket server (default: '0.0.0.0')
-  webSocketAuthRequired?: boolean; // Require authentication for WebSocket connections (default: true)
-  webSocketMaxConnections?: number; // Maximum concurrent WebSocket connections (default: 1000)
-  webSocketHeartbeatInterval?: number; // Heartbeat interval in ms (default: 30000)
-  webSocketAllowedOrigins?: string[]; // Allowed CORS origins (default: ['*'] - configure for production!)
-
-  // Core timing intervals (alignment cycle)
-  alignmentCycleIntervalMs?: number; // Alignment cycle interval in ms (default: 30000)
-  intentPollingIntervalMs?: number; // Intent polling interval in ms (default: 10000)
-  settlementMonitoringIntervalMs?: number; // Settlement monitoring interval in ms (default: 60000)
-
-  // Embedding configuration
-  embeddingProvider?: 'openai' | 'voyage' | 'cohere' | 'fallback'; // Embedding provider for Anthropic users (default: 'fallback' - WARNING: development only)
-  embeddingApiKey?: string; // API key for external embedding provider (if different from LLM key)
-  embeddingModel?: string; // Model name for embedding provider
-
-  // Negotiation thresholds
-  minNegotiationConfidence?: number; // Minimum LLM confidence score for successful negotiation 0-100 (default: 60)
-
-  // Intent validation thresholds
-  maxIntentFlags?: number; // Maximum flags before intent is marked unalignable (default: 5)
-  minIntentProseLength?: number; // Minimum prose length for valid intent in characters (default: 50)
-
-  // Monitoring & Analytics configuration
-  enableMonitoring?: boolean; // Enable health and performance monitoring (default: true)
-  healthServerPort?: number; // Port for HTTP health server (e.g. 9090)
-  monitoringHealthCheckInterval?: number; // Health check interval in ms (default: 30000)
-  monitoringMetricsInterval?: number; // Performance metrics interval in ms (default: 10000)
-  monitoringSnapshotRetention?: number; // Number of performance snapshots to keep (default: 100)
-  monitoringHighLatencyThreshold?: number; // High latency alert threshold in ms (default: 1000)
-  monitoringHighErrorRateThreshold?: number; // High error rate threshold per minute (default: 10)
-  monitoringHighMemoryThreshold?: number; // High memory usage threshold percentage (default: 90)
-
-  // Governance configuration
-  enableGovernance?: boolean; // Enable on-chain governance system (default: false)
-  governanceVotingPeriodDays?: number; // Voting period for proposals in days (default: 7)
-  governanceExecutionDelayDays?: number; // Execution delay after approval in days (default: 3)
-  governanceQuorumPercentage?: number; // Quorum required for proposal validity (default: 30)
-  governanceApprovalThreshold?: number; // Approval threshold percentage (default: 50)
-  governanceProposalMinStake?: number; // Minimum stake to submit proposals (default: 1000)
-  governanceMonitoringInterval?: number; // Proposal monitoring interval in ms (default: 3600000 - 1 hour)
-
-  // NCIP Hover Tips configuration
-  enableNCIPHoverTips?: boolean; // Enable NCIP hover tips (default: true)
-  ncipHoverTipsShortOnly?: boolean; // Show short descriptions only (default: false)
-  ncipHoverTipsShowReferences?: boolean; // Show NCIP document references (default: true)
-  ncipHoverTipsShowRelated?: boolean; // Show related concepts (default: true)
-  ncipHoverTipsDelayMs?: number; // Delay before showing tooltip in ms (default: 300)
-
-  // Security Apps Integration configuration
-  // @see https://github.com/kase1111-hash/Boundary-SIEM
-  // @see https://github.com/kase1111-hash/boundary-daemon-
-  enableSecurityApps?: boolean; // Enable Boundary SIEM and Daemon integration (default: false)
-  boundaryDaemonUrl?: string; // Boundary Daemon API URL (default: 'http://localhost:9000')
-  boundaryDaemonToken?: string; // Authentication token for Boundary Daemon
-  boundaryDaemonFailOpen?: boolean; // Allow operations if daemon unavailable (default: false)
-  boundarySIEMUrl?: string; // Boundary SIEM API URL (default: 'http://localhost:8080')
-  boundarySIEMToken?: string; // Authentication token for Boundary SIEM
-  securityEventBatchSize?: number; // SIEM event batch size (default: 100)
-  securityEventFlushInterval?: number; // SIEM batch flush interval in ms (default: 5000)
-  protectWebSocketConnections?: boolean; // Use Boundary Daemon for WebSocket auth (default: true)
-  protectChainConnections?: boolean; // Use Boundary Daemon for chain connection auth (default: true)
-
+  // Logging
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }
 

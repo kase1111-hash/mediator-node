@@ -22,6 +22,8 @@ const mockChainClient = {
   submitPayout: jest.fn(),
   getPendingIntents: jest.fn(),
   submitIntent: jest.fn(),
+  isAvailable: jest.fn(),
+  getMatchCandidates: jest.fn(),
 };
 
 // Mock logger
@@ -74,6 +76,8 @@ describe('MediatorNode', () => {
     mockChainClient.submitPayout.mockResolvedValue({ success: true });
     mockChainClient.getPendingIntents.mockResolvedValue([]);
     mockChainClient.submitIntent.mockResolvedValue({ success: true });
+    mockChainClient.isAvailable.mockReturnValue(true);
+    mockChainClient.getMatchCandidates.mockResolvedValue([]);
     (ChainClient.fromConfig as jest.Mock).mockReturnValue(mockChainClient);
 
     // IntentIngester mocks
