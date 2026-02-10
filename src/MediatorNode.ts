@@ -4,16 +4,8 @@ import { VectorDatabase } from './mapping/VectorDatabase';
 import { LLMProvider } from './llm/LLMProvider';
 import { SettlementManager } from './settlement/SettlementManager';
 import { ReputationTracker } from './reputation/ReputationTracker';
-import { StakeManager } from './consensus/StakeManager';
-import { AuthorityManager } from './consensus/AuthorityManager';
-import { ValidatorRotationManager } from './consensus/ValidatorRotationManager';
 import { ChallengeDetector } from './challenge/ChallengeDetector';
 import { ChallengeManager } from './challenge/ChallengeManager';
-import { SemanticConsensusManager } from './consensus/SemanticConsensusManager';
-import { EffortCaptureSystem } from './effort/EffortCaptureSystem';
-import { DisputeManager } from './dispute/DisputeManager';
-import { LicensingManager } from './licensing/LicensingManager';
-import { MP05SettlementCoordinator } from './settlement/MP05SettlementCoordinator';
 import { HealthServer, HealthStatusProvider } from './monitoring/HealthServer';
 import { ChainClient } from './chain';
 import { logger } from './utils/logger';
@@ -33,16 +25,8 @@ export class MediatorNode {
   private llmProvider: LLMProvider;
   private settlementManager: SettlementManager;
   private reputationTracker: ReputationTracker;
-  private stakeManager: StakeManager;
-  private authorityManager: AuthorityManager;
-  private validatorRotationManager?: ValidatorRotationManager;
   private challengeDetector: ChallengeDetector;
   private challengeManager: ChallengeManager;
-  private semanticConsensusManager: SemanticConsensusManager;
-  private effortCaptureSystem?: EffortCaptureSystem;
-  private disputeManager?: DisputeManager;
-  private licensingManager?: LicensingManager;
-  private mp05Coordinator?: MP05SettlementCoordinator;
   private healthServer?: HealthServer;
   private chainClient: ChainClient;
 
@@ -61,14 +45,6 @@ export class MediatorNode {
     this.vectorDb = new VectorDatabase(config);
     this.llmProvider = new LLMProvider(config);
     this.reputationTracker = new ReputationTracker(config);
-    this.stakeManager = new StakeManager(config);
-    this.authorityManager = new AuthorityManager(config);
-
-    // Initialize semantic consensus system (MP-01)
-    this.semanticConsensusManager = new SemanticConsensusManager(
-      config,
-      this.llmProvider
-    );
 
     // Initialize settlement manager
     this.settlementManager = new SettlementManager(config);
@@ -76,37 +52,6 @@ export class MediatorNode {
     // Initialize challenge system
     this.challengeDetector = new ChallengeDetector(config, this.llmProvider);
     this.challengeManager = new ChallengeManager(config, this.reputationTracker);
-
-    // Initialize Effort Capture system (MP-02)
-    if (config.enableEffortCapture) {
-      this.effortCaptureSystem = new EffortCaptureSystem(config, this.llmProvider);
-    }
-
-    // Initialize Dispute & Escalation system (MP-03)
-    if (config.enableDisputeSystem) {
-      this.disputeManager = new DisputeManager(config, this.llmProvider);
-    }
-
-    // Initialize Licensing & Delegation system (MP-04)
-    if (config.enableLicensingSystem) {
-      this.licensingManager = new LicensingManager(config);
-    }
-
-    // Initialize Settlement & Capitalization system (MP-05)
-    if (config.enableSettlementSystem) {
-      this.mp05Coordinator = new MP05SettlementCoordinator(
-        config,
-        './data/mp05',
-        this.effortCaptureSystem,
-        this.disputeManager,
-        this.licensingManager
-      );
-    }
-
-    // Initialize Validator Rotation system for DPoS mode
-    if (config.consensusMode === 'dpos' || config.consensusMode === 'hybrid') {
-      this.validatorRotationManager = new ValidatorRotationManager(config);
-    }
 
     logger.info('Mediator node created', {
       mediatorId: config.mediatorPublicKey,
@@ -128,38 +73,6 @@ export class MediatorNode {
       // Load reputation
       await this.reputationTracker.loadReputation();
 
-      // Initialize consensus components based on mode
-      if (this.config.consensusMode === 'dpos' || this.config.consensusMode === 'hybrid') {
-        await this.stakeManager.loadDelegations();
-
-        if (this.config.bondedStakeAmount && this.config.bondedStakeAmount > 0) {
-          await this.stakeManager.bondStake(this.config.bondedStakeAmount);
-        }
-
-        if (!this.stakeManager.meetsMinimumStake()) {
-          logger.error('Cannot start: Minimum stake requirement not met');
-          return;
-        }
-
-        if (this.validatorRotationManager) {
-          await this.validatorRotationManager.start();
-          const stake = this.stakeManager.getStake();
-          await this.validatorRotationManager.registerValidator(
-            this.config.mediatorPublicKey,
-            stake.effectiveStake
-          );
-        }
-      }
-
-      if (this.config.consensusMode === 'poa' || this.config.consensusMode === 'hybrid') {
-        await this.authorityManager.loadAuthoritySet();
-
-        if (!this.authorityManager.checkAuthorization()) {
-          logger.error('Cannot start: Not authorized in PoA mode');
-          return;
-        }
-      }
-
       // Start intent ingestion
       const intentPollingInterval = this.config.intentPollingIntervalMs || 10000;
       this.ingester.startPolling(intentPollingInterval);
@@ -176,11 +89,6 @@ export class MediatorNode {
         this.startChallengeMonitoring();
       }
 
-      // Start Effort Capture system if enabled (MP-02)
-      if (this.effortCaptureSystem) {
-        this.effortCaptureSystem.start();
-      }
-
       // Start health server
       if (this.config.healthServerPort) {
         this.healthServer = new HealthServer({ port: this.config.healthServerPort });
@@ -190,7 +98,6 @@ export class MediatorNode {
 
       logger.info('Mediator node started successfully', {
         reputation: this.reputationTracker.getWeight(),
-        effectiveStake: this.stakeManager.getEffectiveStake(),
         challengeSubmission: this.config.enableChallengeSubmission || false,
       });
     } catch (error) {
@@ -213,16 +120,6 @@ export class MediatorNode {
     }
 
     this.ingester.stopPolling();
-
-    // Stop Validator Rotation manager if running
-    if (this.validatorRotationManager) {
-      this.validatorRotationManager.stop();
-    }
-
-    // Stop Effort Capture system if running (MP-02)
-    if (this.effortCaptureSystem) {
-      this.effortCaptureSystem.stop();
-    }
 
     // Perform async cleanup
     const cleanupOperations: Promise<void>[] = [];
@@ -282,16 +179,6 @@ export class MediatorNode {
    */
   private async executeAlignmentCycle(): Promise<void> {
     try {
-      // DPoS slot-based gating: only mediate during our assigned slot
-      if (this.validatorRotationManager && !this.validatorRotationManager.shouldMediate()) {
-        logger.debug('Not our slot, skipping alignment cycle');
-        return;
-      }
-
-      if (this.validatorRotationManager) {
-        this.validatorRotationManager.recordSlotActivity(this.config.mediatorPublicKey);
-      }
-
       logger.debug('Starting alignment cycle');
 
       // Phase 1: Ingestion (already running in background via IntentIngester)
@@ -366,8 +253,7 @@ export class MediatorNode {
       const settlement = this.settlementManager.createSettlement(
         candidate.intentA,
         candidate.intentB,
-        negotiationResult,
-        this.stakeManager.getEffectiveStake()
+        negotiationResult
       );
 
       const submitted = await this.settlementManager.submitSettlement(settlement);
@@ -541,7 +427,6 @@ export class MediatorNode {
     cachedIntents: number;
     activeSettlements: number;
     reputation: number;
-    effectiveStake: number;
     challengeStats?: {
       total: number;
       pending: number;
@@ -555,7 +440,6 @@ export class MediatorNode {
       cachedIntents: this.ingester.getCachedIntents().length,
       activeSettlements: this.settlementManager.getActiveSettlements().length,
       reputation: this.reputationTracker.getWeight(),
-      effectiveStake: this.stakeManager.getEffectiveStake(),
     };
 
     if (this.config.enableChallengeSubmission) {

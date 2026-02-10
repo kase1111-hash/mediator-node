@@ -40,16 +40,8 @@ jest.mock('../../src/mapping/VectorDatabase');
 jest.mock('../../src/llm/LLMProvider');
 jest.mock('../../src/settlement/SettlementManager');
 jest.mock('../../src/reputation/ReputationTracker');
-jest.mock('../../src/consensus/StakeManager');
-jest.mock('../../src/consensus/AuthorityManager');
-jest.mock('../../src/consensus/ValidatorRotationManager');
 jest.mock('../../src/challenge/ChallengeDetector');
 jest.mock('../../src/challenge/ChallengeManager');
-jest.mock('../../src/consensus/SemanticConsensusManager');
-jest.mock('../../src/effort/EffortCaptureSystem');
-jest.mock('../../src/dispute/DisputeManager');
-jest.mock('../../src/licensing/LicensingManager');
-jest.mock('../../src/settlement/MP05SettlementCoordinator');
 
 // Import mocked modules
 import { IntentIngester } from '../../src/ingestion/IntentIngester';
@@ -57,15 +49,8 @@ import { VectorDatabase } from '../../src/mapping/VectorDatabase';
 import { LLMProvider } from '../../src/llm/LLMProvider';
 import { SettlementManager } from '../../src/settlement/SettlementManager';
 import { ReputationTracker } from '../../src/reputation/ReputationTracker';
-import { StakeManager } from '../../src/consensus/StakeManager';
-import { AuthorityManager } from '../../src/consensus/AuthorityManager';
-import { ValidatorRotationManager } from '../../src/consensus/ValidatorRotationManager';
 import { ChallengeDetector } from '../../src/challenge/ChallengeDetector';
 import { ChallengeManager } from '../../src/challenge/ChallengeManager';
-import { SemanticConsensusManager } from '../../src/consensus/SemanticConsensusManager';
-import { EffortCaptureSystem } from '../../src/effort/EffortCaptureSystem';
-import { DisputeManager } from '../../src/dispute/DisputeManager';
-import { LicensingManager } from '../../src/licensing/LicensingManager';
 import { logger } from '../../src/utils/logger';
 
 // Get mock implementations
@@ -74,9 +59,6 @@ const MockVectorDatabase = VectorDatabase as jest.MockedClass<typeof VectorDatab
 const MockLLMProvider = LLMProvider as jest.MockedClass<typeof LLMProvider>;
 const MockSettlementManager = SettlementManager as jest.MockedClass<typeof SettlementManager>;
 const MockReputationTracker = ReputationTracker as jest.MockedClass<typeof ReputationTracker>;
-const MockStakeManager = StakeManager as jest.MockedClass<typeof StakeManager>;
-const MockAuthorityManager = AuthorityManager as jest.MockedClass<typeof AuthorityManager>;
-const MockValidatorRotationManager = ValidatorRotationManager as jest.MockedClass<typeof ValidatorRotationManager>;
 
 describe('MediatorNode', () => {
   let config: MediatorConfig;
@@ -117,37 +99,6 @@ describe('MediatorNode', () => {
     MockReputationTracker.prototype.loadReputation = jest.fn().mockResolvedValue(undefined);
     MockReputationTracker.prototype.getWeight = jest.fn().mockReturnValue(1.0);
 
-    // StakeManager mocks
-    MockStakeManager.prototype.loadDelegations = jest.fn().mockResolvedValue(undefined);
-    MockStakeManager.prototype.bondStake = jest.fn().mockResolvedValue(true);
-    MockStakeManager.prototype.meetsMinimumStake = jest.fn().mockReturnValue(true);
-    MockStakeManager.prototype.getEffectiveStake = jest.fn().mockReturnValue(1000);
-    MockStakeManager.prototype.getStake = jest.fn().mockReturnValue({
-      mediatorId: 'test-public-key',
-      amount: 1000,
-      delegatedAmount: 0,
-      effectiveStake: 1000,
-      delegators: [],
-      status: 'bonded',
-    });
-
-    // AuthorityManager mocks
-    MockAuthorityManager.prototype.loadAuthoritySet = jest.fn().mockResolvedValue(undefined);
-    MockAuthorityManager.prototype.checkAuthorization = jest.fn().mockReturnValue(true);
-
-    // ValidatorRotationManager mocks
-    MockValidatorRotationManager.prototype.start = jest.fn().mockResolvedValue(undefined);
-    MockValidatorRotationManager.prototype.stop = jest.fn();
-    MockValidatorRotationManager.prototype.registerValidator = jest.fn().mockResolvedValue(undefined);
-    MockValidatorRotationManager.prototype.isCurrentValidator = jest.fn().mockReturnValue(true);
-    MockValidatorRotationManager.prototype.shouldMediate = jest.fn().mockReturnValue(true);
-    MockValidatorRotationManager.prototype.getCurrentEpoch = jest.fn().mockReturnValue({ epochNumber: 1 });
-    MockValidatorRotationManager.prototype.getCurrentSlot = jest.fn().mockReturnValue(null);
-    MockValidatorRotationManager.prototype.getNextSlotForMediator = jest.fn().mockReturnValue(null);
-    MockValidatorRotationManager.prototype.getTimeUntilNextSlot = jest.fn().mockReturnValue(0);
-    MockValidatorRotationManager.prototype.recordSlotActivity = jest.fn();
-    MockValidatorRotationManager.prototype.getStatus = jest.fn().mockReturnValue({});
-
     // SettlementManager mocks
     MockSettlementManager.prototype.monitorSettlements = jest.fn().mockResolvedValue(undefined);
     MockSettlementManager.prototype.getActiveSettlements = jest.fn().mockReturnValue([]);
@@ -171,39 +122,6 @@ describe('MediatorNode', () => {
     // ChallengeDetector mocks
     (ChallengeDetector as jest.MockedClass<typeof ChallengeDetector>).prototype.analyzeSettlement = jest.fn().mockResolvedValue(null);
     (ChallengeDetector as jest.MockedClass<typeof ChallengeDetector>).prototype.shouldChallenge = jest.fn().mockReturnValue(false);
-
-    // SemanticConsensusManager mocks
-    (SemanticConsensusManager as jest.MockedClass<typeof SemanticConsensusManager>).prototype.checkVerificationTimeouts = jest.fn().mockResolvedValue(undefined);
-    (SemanticConsensusManager as jest.MockedClass<typeof SemanticConsensusManager>).prototype.getVerificationStats = jest.fn().mockReturnValue({
-      total: 0,
-      pending: 0,
-      inProgress: 0,
-      consensusReached: 0,
-      consensusFailed: 0,
-      timedOut: 0,
-    });
-
-    // EffortCaptureSystem mocks
-    (EffortCaptureSystem as jest.MockedClass<typeof EffortCaptureSystem>).prototype.start = jest.fn();
-    (EffortCaptureSystem as jest.MockedClass<typeof EffortCaptureSystem>).prototype.stop = jest.fn();
-    (EffortCaptureSystem as jest.MockedClass<typeof EffortCaptureSystem>).prototype.getStatus = jest.fn().mockReturnValue({
-      isRunning: true,
-      receipts: {
-        totalReceipts: 0,
-        totalSignals: 0,
-        totalDurationMinutes: 0,
-        receiptsByStatus: {},
-      },
-      anchoring: {
-        totalAnchored: 0,
-      },
-    });
-
-    // DisputeManager mocks
-    (DisputeManager as jest.MockedClass<typeof DisputeManager>).prototype.getStats = jest.fn().mockReturnValue({});
-
-    // LicensingManager mocks
-    (LicensingManager as jest.MockedClass<typeof LicensingManager>).prototype.getStats = jest.fn().mockReturnValue({});
   };
 
   beforeEach(() => {
@@ -244,57 +162,6 @@ describe('MediatorNode', () => {
       expect(MockLLMProvider).toHaveBeenCalled();
       expect(MockSettlementManager).toHaveBeenCalled();
       expect(MockReputationTracker).toHaveBeenCalled();
-      expect(MockStakeManager).toHaveBeenCalled();
-      expect(MockAuthorityManager).toHaveBeenCalled();
-    });
-
-    it('should initialize ValidatorRotationManager for DPoS mode', () => {
-      config = createMockConfig({ consensusMode: 'dpos' });
-      node = new MediatorNode(config);
-
-      expect(MockValidatorRotationManager).toHaveBeenCalled();
-    });
-
-    it('should initialize ValidatorRotationManager for hybrid mode', () => {
-      config = createMockConfig({ consensusMode: 'hybrid' });
-      node = new MediatorNode(config);
-
-      expect(MockValidatorRotationManager).toHaveBeenCalled();
-    });
-
-    it('should NOT initialize ValidatorRotationManager for permissionless mode', () => {
-      config = createMockConfig({ consensusMode: 'permissionless' });
-      node = new MediatorNode(config);
-
-      expect(MockValidatorRotationManager).not.toHaveBeenCalled();
-    });
-
-    it('should initialize EffortCaptureSystem when enabled', () => {
-      config = createMockConfig({ enableEffortCapture: true });
-      node = new MediatorNode(config);
-
-      expect(EffortCaptureSystem).toHaveBeenCalled();
-    });
-
-    it('should NOT initialize EffortCaptureSystem when disabled', () => {
-      config = createMockConfig({ enableEffortCapture: false });
-      node = new MediatorNode(config);
-
-      expect(EffortCaptureSystem).not.toHaveBeenCalled();
-    });
-
-    it('should initialize DisputeManager when enabled', () => {
-      config = createMockConfig({ enableDisputeSystem: true });
-      node = new MediatorNode(config);
-
-      expect(DisputeManager).toHaveBeenCalled();
-    });
-
-    it('should initialize LicensingManager when enabled', () => {
-      config = createMockConfig({ enableLicensingSystem: true });
-      node = new MediatorNode(config);
-
-      expect(LicensingManager).toHaveBeenCalled();
     });
   });
 
@@ -338,109 +205,6 @@ describe('MediatorNode', () => {
       expect(MockIntentIngester.prototype.startPolling).toHaveBeenCalledWith(10000);
     });
 
-    describe('DPoS mode', () => {
-      beforeEach(() => {
-        config = createMockConfig({
-          consensusMode: 'dpos',
-          bondedStakeAmount: 1000,
-          minEffectiveStake: 500,
-        });
-        node = new MediatorNode(config);
-      });
-
-      it('should load delegations', async () => {
-        const startPromise = node.start();
-        jest.advanceTimersByTime(100);
-        await startPromise;
-
-        expect(MockStakeManager.prototype.loadDelegations).toHaveBeenCalled();
-      });
-
-      it('should bond stake if configured', async () => {
-        const startPromise = node.start();
-        jest.advanceTimersByTime(100);
-        await startPromise;
-
-        expect(MockStakeManager.prototype.bondStake).toHaveBeenCalledWith(1000);
-      });
-
-      it('should check minimum stake requirement', async () => {
-        const startPromise = node.start();
-        jest.advanceTimersByTime(100);
-        await startPromise;
-
-        expect(MockStakeManager.prototype.meetsMinimumStake).toHaveBeenCalled();
-      });
-
-      it('should NOT start if minimum stake not met', async () => {
-        MockStakeManager.prototype.meetsMinimumStake.mockReturnValue(false);
-
-        const startPromise = node.start();
-        jest.advanceTimersByTime(100);
-        await startPromise;
-
-        expect(logger.error).toHaveBeenCalledWith('Cannot start: Minimum stake requirement not met');
-        expect(MockIntentIngester.prototype.startPolling).not.toHaveBeenCalled();
-      });
-
-      it('should start validator rotation manager', async () => {
-        const startPromise = node.start();
-        jest.advanceTimersByTime(100);
-        await startPromise;
-
-        expect(MockValidatorRotationManager.prototype.start).toHaveBeenCalled();
-        expect(MockValidatorRotationManager.prototype.registerValidator).toHaveBeenCalled();
-      });
-    });
-
-    describe('PoA mode', () => {
-      beforeEach(() => {
-        config = createMockConfig({
-          consensusMode: 'poa',
-          poaAuthorityKey: 'authority-key-123',
-        });
-        node = new MediatorNode(config);
-      });
-
-      it('should load authority set', async () => {
-        const startPromise = node.start();
-        jest.advanceTimersByTime(100);
-        await startPromise;
-
-        expect(MockAuthorityManager.prototype.loadAuthoritySet).toHaveBeenCalled();
-      });
-
-      it('should check authorization', async () => {
-        const startPromise = node.start();
-        jest.advanceTimersByTime(100);
-        await startPromise;
-
-        expect(MockAuthorityManager.prototype.checkAuthorization).toHaveBeenCalled();
-      });
-
-      it('should NOT start if not authorized', async () => {
-        MockAuthorityManager.prototype.checkAuthorization.mockReturnValue(false);
-
-        const startPromise = node.start();
-        jest.advanceTimersByTime(100);
-        await startPromise;
-
-        expect(logger.error).toHaveBeenCalledWith('Cannot start: Not authorized in PoA mode');
-        expect(MockIntentIngester.prototype.startPolling).not.toHaveBeenCalled();
-      });
-    });
-
-    it('should start effort capture system when enabled', async () => {
-      config = createMockConfig({ enableEffortCapture: true });
-      node = new MediatorNode(config);
-
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      expect(EffortCaptureSystem.prototype.start).toHaveBeenCalled();
-    });
-
     it('should handle errors during start', async () => {
       MockVectorDatabase.prototype.initialize.mockRejectedValue(new Error('Init failed'));
 
@@ -473,30 +237,6 @@ describe('MediatorNode', () => {
       await node.stop();
 
       expect(logger.info).toHaveBeenCalledWith('Mediator node stopped');
-    });
-
-    it('should stop validator rotation manager in DPoS mode', async () => {
-      config = createMockConfig({ consensusMode: 'dpos' });
-      node = new MediatorNode(config);
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      await node.stop();
-
-      expect(MockValidatorRotationManager.prototype.stop).toHaveBeenCalled();
-    });
-
-    it('should stop effort capture system when enabled', async () => {
-      config = createMockConfig({ enableEffortCapture: true });
-      node = new MediatorNode(config);
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      await node.stop();
-
-      expect(EffortCaptureSystem.prototype.stop).toHaveBeenCalled();
     });
 
     it('should handle cleanup errors gracefully', async () => {
@@ -557,13 +297,6 @@ describe('MediatorNode', () => {
 
       const status = node.getStatus();
       expect(status.reputation).toBe(5.5);
-    });
-
-    it('should return effective stake', () => {
-      MockStakeManager.prototype.getEffectiveStake.mockReturnValue(2000);
-
-      const status = node.getStatus();
-      expect(status.effectiveStake).toBe(2000);
     });
 
     it('should include challenge stats when enabled', () => {
@@ -650,20 +383,6 @@ describe('MediatorNode', () => {
 
       // Should log error but not crash
       expect(logger.error).toHaveBeenCalledWith('Error in alignment cycle', expect.any(Object));
-    });
-
-    it('should respect DPoS slot-based gating', async () => {
-      config = createMockConfig({ consensusMode: 'dpos' });
-      node = new MediatorNode(config);
-
-      MockValidatorRotationManager.prototype.shouldMediate.mockReturnValue(false);
-
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      // Should not process intents when not our slot
-      expect(MockIntentIngester.prototype.getPrioritizedIntents).not.toHaveBeenCalled();
     });
   });
 

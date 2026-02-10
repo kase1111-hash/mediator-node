@@ -5,4 +5,3 @@
  */
 
 export * from './VectorDatabase';
-export * from './IntentClusteringService';
