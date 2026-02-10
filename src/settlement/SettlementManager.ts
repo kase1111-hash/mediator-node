@@ -7,8 +7,6 @@ import {
 } from '../types';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';
-import { BurnManager } from '../burn/BurnManager';
-import { SemanticConsensusManager } from '../consensus/SemanticConsensusManager';
 import { ChainClient } from '../chain';
 
 /**
@@ -18,19 +16,13 @@ import { ChainClient } from '../chain';
 export class SettlementManager {
   private config: MediatorConfig;
   private activeSettlements: Map<string, ProposedSettlement> = new Map();
-  private burnManager: BurnManager | null = null;
-  private semanticConsensusManager: SemanticConsensusManager | null = null;
   private chainClient: ChainClient;
 
   constructor(
     config: MediatorConfig,
-    burnManager?: BurnManager,
-    semanticConsensusManager?: SemanticConsensusManager,
     chainClient?: ChainClient
   ) {
     this.config = config;
-    this.burnManager = burnManager || null;
-    this.semanticConsensusManager = semanticConsensusManager || null;
     this.chainClient = chainClient || ChainClient.fromConfig(config);
   }
 
@@ -84,22 +76,11 @@ export class SettlementManager {
       );
     }
 
-    // Check if semantic consensus verification is required (MP-01 Phase 3)
-    if (this.semanticConsensusManager?.requiresVerification(settlement)) {
-      settlement.requiresVerification = true;
-      settlement.verificationStatus = 'pending';
-      logger.info('High-value settlement requires semantic verification', {
-        id: settlementId,
-        value: this.calculateSettlementValue(settlement),
-      });
-    }
-
     logger.info('Created proposed settlement', {
       id: settlementId,
       intentA: intentA.hash,
       intentB: intentB.hash,
       fee: facilitationFee,
-      requiresVerification: settlement.requiresVerification,
     });
 
     return settlement;
@@ -119,35 +100,6 @@ export class SettlementManager {
       if (result.success) {
         this.activeSettlements.set(settlement.id, settlement);
         logger.info('Settlement submitted successfully', { id: settlement.id });
-
-        // Initiate semantic verification if required (MP-01 Phase 3)
-        if (settlement.requiresVerification && this.semanticConsensusManager) {
-          try {
-            const verification = await this.semanticConsensusManager.initiateVerification(
-              settlement
-            );
-            settlement.verificationStatus = 'in_progress';
-            settlement.verificationRequest = verification.request;
-            logger.info('Semantic verification initiated', {
-              settlementId: settlement.id,
-              verifiers: verification.request.selectedVerifiers.length,
-              deadline: new Date(verification.request.responseDeadline).toISOString(),
-            });
-          } catch (error) {
-            logger.error('Failed to initiate semantic verification', {
-              error,
-              settlementId: settlement.id,
-            });
-            // Don't fail the settlement submission if verification initiation fails
-            // Mark as skipped so callers can distinguish from truly not required
-            settlement.verificationStatus = 'skipped';
-            logger.warn('Settlement proceeding without required verification', {
-              settlementId: settlement.id,
-              reason: error instanceof Error ? error.message : 'Unknown error',
-            });
-          }
-        }
-
         return true;
       }
 
@@ -238,75 +190,6 @@ export class SettlementManager {
         return;
       }
 
-      // Check semantic verification status (MP-01 Phase 3)
-      if (settlement.requiresVerification && this.semanticConsensusManager) {
-        const verification = this.semanticConsensusManager.getVerification(settlement.id);
-
-        if (!verification) {
-          logger.error('Settlement requires verification but no verification found', {
-            id: settlement.id,
-          });
-          settlement.status = 'rejected';
-          return;
-        }
-
-        // Block closure until consensus is reached
-        if (verification.status === 'pending' || verification.status === 'in_progress') {
-          logger.info('Settlement closure blocked pending verification consensus', {
-            id: settlement.id,
-            verificationStatus: verification.status,
-          });
-          return; // Don't close yet, keep monitoring
-        }
-
-        // Check if consensus was reached successfully
-        if (verification.status !== 'consensus_reached') {
-          logger.warn('Settlement verification failed, cannot close', {
-            id: settlement.id,
-            verificationStatus: verification.status,
-            consensusCount: verification.consensusCount,
-            required: verification.requiredConsensus,
-          });
-          settlement.status = 'rejected';
-          return;
-        }
-
-        logger.info('Settlement verification consensus reached, proceeding with closure', {
-          id: settlement.id,
-          consensusCount: verification.consensusCount,
-        });
-      }
-
-      // Execute success burn (MP-06 Phase 5)
-      // Calculate total settlement value from facilitation fee
-      const settlementValue = settlement.facilitationFeePercent > 0
-        ? settlement.facilitationFee / (settlement.facilitationFeePercent / 100)
-        : 0;
-
-      if (this.burnManager && settlementValue > 0) {
-        try {
-          const burnResult = await this.burnManager.executeSuccessBurn(
-            settlement.id,
-            settlementValue,
-            this.config.mediatorPublicKey
-          );
-
-          if (burnResult) {
-            logger.info('Success burn executed for settlement closure', {
-              settlementId: settlement.id,
-              settlementValue,
-              burnAmount: burnResult.amount,
-            });
-          }
-        } catch (burnError) {
-          logger.error('Error executing success burn', {
-            error: burnError,
-            settlementId: settlement.id,
-          });
-          // Don't fail settlement closure due to burn errors
-        }
-      }
-
       // Use ChainClient to submit payout
       const payoutResult = await this.chainClient.submitPayout(
         settlement.id,
@@ -335,16 +218,6 @@ export class SettlementManager {
    */
   private getSettlementSignatureData(settlement: ProposedSettlement): string {
     return `${settlement.id}:${settlement.intentHashA}:${settlement.intentHashB}:${settlement.timestamp}`;
-  }
-
-  /**
-   * Calculate settlement value from proposed terms
-   */
-  private calculateSettlementValue(settlement: ProposedSettlement): number {
-    // Use the same logic as in closeSettlement
-    return settlement.facilitationFeePercent > 0
-      ? settlement.facilitationFee / (settlement.facilitationFeePercent / 100)
-      : 0;
   }
 
   /**

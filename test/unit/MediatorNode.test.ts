@@ -5,6 +5,25 @@ import { createMockConfig, createMockIntent } from '../utils/testUtils';
 // Mock axios
 jest.mock('axios');
 
+// Mock ChainClient - factory must not reference external consts (ts-jest hoisting)
+jest.mock('../../src/chain', () => ({
+  ChainClient: {
+    fromConfig: jest.fn(),
+  },
+}));
+
+import { ChainClient } from '../../src/chain';
+
+const mockChainClient = {
+  getRecentSettlements: jest.fn(),
+  getIntent: jest.fn(),
+  submitSettlement: jest.fn(),
+  getSettlementStatus: jest.fn(),
+  submitPayout: jest.fn(),
+  getPendingIntents: jest.fn(),
+  submitIntent: jest.fn(),
+};
+
 // Mock logger
 jest.mock('../../src/utils/logger', () => ({
   logger: {
@@ -24,23 +43,13 @@ jest.mock('../../src/reputation/ReputationTracker');
 jest.mock('../../src/consensus/StakeManager');
 jest.mock('../../src/consensus/AuthorityManager');
 jest.mock('../../src/consensus/ValidatorRotationManager');
-jest.mock('../../src/burn/BurnManager');
-jest.mock('../../src/burn/LoadMonitor');
 jest.mock('../../src/challenge/ChallengeDetector');
 jest.mock('../../src/challenge/ChallengeManager');
 jest.mock('../../src/consensus/SemanticConsensusManager');
-jest.mock('../../src/sybil/SubmissionTracker');
-jest.mock('../../src/sybil/SpamProofDetector');
 jest.mock('../../src/effort/EffortCaptureSystem');
 jest.mock('../../src/dispute/DisputeManager');
 jest.mock('../../src/licensing/LicensingManager');
 jest.mock('../../src/settlement/MP05SettlementCoordinator');
-jest.mock('../../src/websocket/WebSocketServer');
-jest.mock('../../src/websocket/EventPublisher');
-jest.mock('../../src/monitoring/HealthMonitor');
-jest.mock('../../src/monitoring/PerformanceAnalytics');
-jest.mock('../../src/monitoring/MonitoringPublisher');
-jest.mock('../../src/governance/GovernanceManager');
 
 // Import mocked modules
 import { IntentIngester } from '../../src/ingestion/IntentIngester';
@@ -51,20 +60,12 @@ import { ReputationTracker } from '../../src/reputation/ReputationTracker';
 import { StakeManager } from '../../src/consensus/StakeManager';
 import { AuthorityManager } from '../../src/consensus/AuthorityManager';
 import { ValidatorRotationManager } from '../../src/consensus/ValidatorRotationManager';
-import { BurnManager } from '../../src/burn/BurnManager';
-import { LoadMonitor } from '../../src/burn/LoadMonitor';
 import { ChallengeDetector } from '../../src/challenge/ChallengeDetector';
 import { ChallengeManager } from '../../src/challenge/ChallengeManager';
 import { SemanticConsensusManager } from '../../src/consensus/SemanticConsensusManager';
-import { SubmissionTracker } from '../../src/sybil/SubmissionTracker';
-import { SpamProofDetector } from '../../src/sybil/SpamProofDetector';
 import { EffortCaptureSystem } from '../../src/effort/EffortCaptureSystem';
 import { DisputeManager } from '../../src/dispute/DisputeManager';
 import { LicensingManager } from '../../src/licensing/LicensingManager';
-import { WebSocketServer } from '../../src/websocket/WebSocketServer';
-import { HealthMonitor } from '../../src/monitoring/HealthMonitor';
-import { PerformanceAnalytics } from '../../src/monitoring/PerformanceAnalytics';
-import { GovernanceManager } from '../../src/governance/GovernanceManager';
 import { logger } from '../../src/utils/logger';
 
 // Get mock implementations
@@ -76,12 +77,6 @@ const MockReputationTracker = ReputationTracker as jest.MockedClass<typeof Reput
 const MockStakeManager = StakeManager as jest.MockedClass<typeof StakeManager>;
 const MockAuthorityManager = AuthorityManager as jest.MockedClass<typeof AuthorityManager>;
 const MockValidatorRotationManager = ValidatorRotationManager as jest.MockedClass<typeof ValidatorRotationManager>;
-const MockBurnManager = BurnManager as jest.MockedClass<typeof BurnManager>;
-const MockSubmissionTracker = SubmissionTracker as jest.MockedClass<typeof SubmissionTracker>;
-const MockSpamProofDetector = SpamProofDetector as jest.MockedClass<typeof SpamProofDetector>;
-const MockLoadMonitor = LoadMonitor as jest.MockedClass<typeof LoadMonitor>;
-const MockHealthMonitor = HealthMonitor as jest.MockedClass<typeof HealthMonitor>;
-const MockWebSocketServer = WebSocketServer as jest.MockedClass<typeof WebSocketServer>;
 
 describe('MediatorNode', () => {
   let config: MediatorConfig;
@@ -89,6 +84,16 @@ describe('MediatorNode', () => {
 
   // Default mock implementations
   const setupDefaultMocks = () => {
+    // ChainClient mocks
+    mockChainClient.getRecentSettlements.mockResolvedValue([]);
+    mockChainClient.getIntent.mockResolvedValue(null);
+    mockChainClient.submitSettlement.mockResolvedValue({ success: true });
+    mockChainClient.getSettlementStatus.mockResolvedValue(null);
+    mockChainClient.submitPayout.mockResolvedValue({ success: true });
+    mockChainClient.getPendingIntents.mockResolvedValue([]);
+    mockChainClient.submitIntent.mockResolvedValue({ success: true });
+    (ChainClient.fromConfig as jest.Mock).mockReturnValue(mockChainClient);
+
     // IntentIngester mocks
     MockIntentIngester.prototype.startPolling = jest.fn();
     MockIntentIngester.prototype.stopPolling = jest.fn();
@@ -143,35 +148,6 @@ describe('MediatorNode', () => {
     MockValidatorRotationManager.prototype.recordSlotActivity = jest.fn();
     MockValidatorRotationManager.prototype.getStatus = jest.fn().mockReturnValue({});
 
-    // BurnManager mocks
-    MockBurnManager.prototype.getBurnStats = jest.fn().mockReturnValue({
-      totalBurns: 0,
-      totalAmount: 0,
-    });
-    MockBurnManager.prototype.getLoadMultiplier = jest.fn().mockReturnValue(1.0);
-    MockBurnManager.prototype.getBurnAnalytics = jest.fn().mockReturnValue({
-      recordLoadMultiplier: jest.fn(),
-    });
-
-    // LoadMonitor mocks
-    MockLoadMonitor.prototype.startMonitoring = jest.fn();
-    MockLoadMonitor.prototype.stopMonitoring = jest.fn();
-    MockLoadMonitor.prototype.getLoadStats = jest.fn().mockReturnValue({
-      currentMetrics: {
-        intentSubmissionRate: 0,
-        activeIntentCount: 0,
-        settlementRate: 0,
-      },
-      currentMultiplier: 1.0,
-      loadFactor: 0,
-    });
-    MockLoadMonitor.prototype.getCurrentMetrics = jest.fn().mockReturnValue({
-      intentSubmissionRate: 0,
-      activeIntentCount: 0,
-      settlementRate: 0,
-    });
-    MockLoadMonitor.prototype.getLoadMultiplier = jest.fn().mockReturnValue(1.0);
-
     // SettlementManager mocks
     MockSettlementManager.prototype.monitorSettlements = jest.fn().mockResolvedValue(undefined);
     MockSettlementManager.prototype.getActiveSettlements = jest.fn().mockReturnValue([]);
@@ -207,25 +183,6 @@ describe('MediatorNode', () => {
       timedOut: 0,
     });
 
-    // WebSocketServer mocks
-    MockWebSocketServer.prototype.start = jest.fn().mockResolvedValue(undefined);
-    MockWebSocketServer.prototype.stop = jest.fn().mockResolvedValue(undefined);
-    MockWebSocketServer.prototype.getConnections = jest.fn().mockReturnValue([]);
-
-    // HealthMonitor mocks
-    MockHealthMonitor.prototype.start = jest.fn();
-    MockHealthMonitor.prototype.stop = jest.fn();
-    MockHealthMonitor.prototype.registerComponent = jest.fn();
-    (HealthMonitor as any).createSimpleChecker = jest.fn().mockReturnValue(() => Promise.resolve({ status: 'healthy' }));
-
-    // PerformanceAnalytics mocks
-    (PerformanceAnalytics as jest.MockedClass<typeof PerformanceAnalytics>).prototype.start = jest.fn();
-    (PerformanceAnalytics as jest.MockedClass<typeof PerformanceAnalytics>).prototype.stop = jest.fn();
-
-    // GovernanceManager mocks
-    (GovernanceManager as jest.MockedClass<typeof GovernanceManager>).prototype.start = jest.fn();
-    (GovernanceManager as jest.MockedClass<typeof GovernanceManager>).prototype.stop = jest.fn();
-
     // EffortCaptureSystem mocks
     (EffortCaptureSystem as jest.MockedClass<typeof EffortCaptureSystem>).prototype.start = jest.fn();
     (EffortCaptureSystem as jest.MockedClass<typeof EffortCaptureSystem>).prototype.stop = jest.fn();
@@ -247,29 +204,6 @@ describe('MediatorNode', () => {
 
     // LicensingManager mocks
     (LicensingManager as jest.MockedClass<typeof LicensingManager>).prototype.getStats = jest.fn().mockReturnValue({});
-
-    // SubmissionTracker mocks
-    MockSubmissionTracker.prototype.processRefunds = jest.fn().mockResolvedValue(undefined);
-    MockSubmissionTracker.prototype.getStats = jest.fn().mockReturnValue({
-      totalSubmissionsToday: 0,
-      totalDeposits: 0,
-      activeDeposits: 0,
-      refundedDeposits: 0,
-      forfeitedDeposits: 0,
-      totalDepositValue: 0,
-    });
-
-    // SpamProofDetector mocks
-    MockSpamProofDetector.prototype.monitorSpamProofs = jest.fn().mockResolvedValue(undefined);
-    MockSpamProofDetector.prototype.analyzeIntent = jest.fn().mockResolvedValue(null);
-    MockSpamProofDetector.prototype.getSubmittedProofs = jest.fn().mockReturnValue([]);
-    MockSpamProofDetector.prototype.getSpamProofStats = jest.fn().mockReturnValue({
-      total: 0,
-      pending: 0,
-      validated: 0,
-      rejected: 0,
-      totalForfeited: 0,
-    });
   };
 
   beforeEach(() => {
@@ -312,8 +246,6 @@ describe('MediatorNode', () => {
       expect(MockReputationTracker).toHaveBeenCalled();
       expect(MockStakeManager).toHaveBeenCalled();
       expect(MockAuthorityManager).toHaveBeenCalled();
-      expect(MockBurnManager).toHaveBeenCalled();
-      expect(MockLoadMonitor).toHaveBeenCalled();
     });
 
     it('should initialize ValidatorRotationManager for DPoS mode', () => {
@@ -363,55 +295,6 @@ describe('MediatorNode', () => {
       node = new MediatorNode(config);
 
       expect(LicensingManager).toHaveBeenCalled();
-    });
-
-    it('should initialize WebSocketServer when enabled', () => {
-      config = createMockConfig({ enableWebSocket: true, webSocketPort: 8080 });
-      node = new MediatorNode(config);
-
-      expect(MockWebSocketServer).toHaveBeenCalledWith(
-        expect.objectContaining({
-          port: 8080,
-        })
-      );
-    });
-
-    it('should initialize HealthMonitor when monitoring is enabled', () => {
-      config = createMockConfig({ enableMonitoring: true });
-      node = new MediatorNode(config);
-
-      expect(MockHealthMonitor).toHaveBeenCalled();
-    });
-
-    it('should initialize GovernanceManager when enabled', () => {
-      config = createMockConfig({ enableGovernance: true });
-      node = new MediatorNode(config);
-
-      expect(GovernanceManager).toHaveBeenCalled();
-    });
-
-    it('should log correct feature flags', () => {
-      config = createMockConfig({
-        enableChallengeSubmission: true,
-        enableSemanticConsensus: true,
-        enableSybilResistance: true,
-        enableEffortCapture: true,
-        enableDisputeSystem: true,
-        enableWebSocket: true,
-      });
-      node = new MediatorNode(config);
-
-      expect(logger.info).toHaveBeenCalledWith(
-        'Mediator node created',
-        expect.objectContaining({
-          challengeSubmissionEnabled: true,
-          semanticConsensusEnabled: true,
-          sybilResistanceEnabled: true,
-          effortCaptureEnabled: true,
-          disputeSystemEnabled: true,
-          webSocketEnabled: true,
-        })
-      );
     });
   });
 
@@ -547,61 +430,6 @@ describe('MediatorNode', () => {
       });
     });
 
-    it('should start load monitoring when enabled', async () => {
-      config = createMockConfig({ loadScalingEnabled: true, loadMonitoringInterval: 5000 });
-      node = new MediatorNode(config);
-
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      expect(MockLoadMonitor.prototype.startMonitoring).toHaveBeenCalledWith(5000);
-    });
-
-    it('should start WebSocket server when enabled', async () => {
-      config = createMockConfig({ enableWebSocket: true });
-      node = new MediatorNode(config);
-
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      expect(MockWebSocketServer.prototype.start).toHaveBeenCalled();
-    });
-
-    it('should start health monitoring when enabled', async () => {
-      config = createMockConfig({ enableMonitoring: true });
-      node = new MediatorNode(config);
-
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      expect(MockHealthMonitor.prototype.start).toHaveBeenCalled();
-    });
-
-    it('should register health checkers', async () => {
-      config = createMockConfig({ enableMonitoring: true });
-      node = new MediatorNode(config);
-
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      expect(MockHealthMonitor.prototype.registerComponent).toHaveBeenCalled();
-    });
-
-    it('should start governance system when enabled', async () => {
-      config = createMockConfig({ enableGovernance: true });
-      node = new MediatorNode(config);
-
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      expect(GovernanceManager.prototype.start).toHaveBeenCalled();
-    });
-
     it('should start effort capture system when enabled', async () => {
       config = createMockConfig({ enableEffortCapture: true });
       node = new MediatorNode(config);
@@ -633,12 +461,6 @@ describe('MediatorNode', () => {
       await node.stop();
 
       expect(MockIntentIngester.prototype.stopPolling).toHaveBeenCalled();
-    });
-
-    it('should stop load monitoring', async () => {
-      await node.stop();
-
-      expect(MockLoadMonitor.prototype.stopMonitoring).toHaveBeenCalled();
     });
 
     it('should save vector database', async () => {
@@ -675,42 +497,6 @@ describe('MediatorNode', () => {
       await node.stop();
 
       expect(EffortCaptureSystem.prototype.stop).toHaveBeenCalled();
-    });
-
-    it('should stop WebSocket server when enabled', async () => {
-      config = createMockConfig({ enableWebSocket: true });
-      node = new MediatorNode(config);
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      await node.stop();
-
-      expect(MockWebSocketServer.prototype.stop).toHaveBeenCalled();
-    });
-
-    it('should stop health monitoring when enabled', async () => {
-      config = createMockConfig({ enableMonitoring: true });
-      node = new MediatorNode(config);
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      await node.stop();
-
-      expect(MockHealthMonitor.prototype.stop).toHaveBeenCalled();
-    });
-
-    it('should stop governance system when enabled', async () => {
-      config = createMockConfig({ enableGovernance: true });
-      node = new MediatorNode(config);
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      await node.stop();
-
-      expect(GovernanceManager.prototype.stop).toHaveBeenCalled();
     });
 
     it('should handle cleanup errors gracefully', async () => {
@@ -780,90 +566,12 @@ describe('MediatorNode', () => {
       expect(status.effectiveStake).toBe(2000);
     });
 
-    it('should return burn stats', () => {
-      MockBurnManager.prototype.getBurnStats.mockReturnValue({
-        totalBurns: 10,
-        totalAmount: 500,
-        byType: {},
-        activeUsers: 5,
-      } as any);
-      MockBurnManager.prototype.getLoadMultiplier.mockReturnValue(1.5);
-
-      const status = node.getStatus();
-      expect(status.burnStats).toEqual({
-        totalBurns: 10,
-        totalAmount: 500,
-        loadMultiplier: 1.5,
-      });
-    });
-
-    it('should include load stats when enabled', () => {
-      config = createMockConfig({ loadScalingEnabled: true });
-      node = new MediatorNode(config);
-
-      MockLoadMonitor.prototype.getLoadStats.mockReturnValue({
-        currentMetrics: {
-          intentSubmissionRate: 5,
-          activeIntentCount: 100,
-          settlementRate: 2,
-          avgBurnAmount: 10,
-          timestamp: Date.now(),
-        },
-        currentMultiplier: 1.2,
-        loadFactor: 0.5,
-        targetRate: 100,
-        maxRate: 200,
-        historicalAverage: {
-          intentRate: 5,
-          settlementRate: 2,
-          avgBurn: 10,
-        },
-      } as any);
-
-      const status = node.getStatus();
-      expect(status.loadStats).toBeDefined();
-      expect(status.loadStats?.intentSubmissionRate).toBe(5);
-      expect(status.loadStats?.currentMultiplier).toBe(1.2);
-    });
-
     it('should include challenge stats when enabled', () => {
       config = createMockConfig({ enableChallengeSubmission: true });
       node = new MediatorNode(config);
 
       const status = node.getStatus();
       expect(status.challengeStats).toBeDefined();
-    });
-
-    it('should include verification stats when semantic consensus enabled', () => {
-      config = createMockConfig({ enableSemanticConsensus: true });
-      node = new MediatorNode(config);
-
-      const status = node.getStatus();
-      expect(status.verificationStats).toBeDefined();
-    });
-
-    it('should include effort capture stats when enabled', () => {
-      config = createMockConfig({ enableEffortCapture: true });
-      node = new MediatorNode(config);
-
-      const status = node.getStatus();
-      expect(status.effortCaptureStats).toBeDefined();
-    });
-
-    it('should include dispute stats when enabled', () => {
-      config = createMockConfig({ enableDisputeSystem: true });
-      node = new MediatorNode(config);
-
-      const status = node.getStatus();
-      expect(status.disputeStats).toBeDefined();
-    });
-
-    it('should include licensing stats when enabled', () => {
-      config = createMockConfig({ enableLicensingSystem: true });
-      node = new MediatorNode(config);
-
-      const status = node.getStatus();
-      expect(status.licensingStats).toBeDefined();
     });
   });
 
@@ -872,16 +580,8 @@ describe('MediatorNode', () => {
       node = new MediatorNode(config);
     });
 
-    it('should return BurnManager', () => {
-      expect(node.getBurnManager()).toBeDefined();
-    });
-
     it('should return IntentIngester', () => {
       expect(node.getIntentIngester()).toBeDefined();
-    });
-
-    it('should return LoadMonitor', () => {
-      expect(node.getLoadMonitor()).toBeDefined();
     });
 
     it('should return SettlementManager', () => {
@@ -894,54 +594,6 @@ describe('MediatorNode', () => {
 
     it('should return ChallengeManager', () => {
       expect(node.getChallengeManager()).toBeDefined();
-    });
-
-    it('should return SemanticConsensusManager', () => {
-      expect(node.getSemanticConsensusManager()).toBeDefined();
-    });
-
-    it('should return undefined for optional components when not enabled', () => {
-      expect(node.getDisputeManager()).toBeUndefined();
-      expect(node.getLicensingManager()).toBeUndefined();
-      expect(node.getMP05Coordinator()).toBeUndefined();
-      expect(node.getWebSocketServer()).toBeUndefined();
-      expect(node.getEventPublisher()).toBeUndefined();
-      expect(node.getGovernanceManager()).toBeUndefined();
-    });
-
-    it('should return WebSocketServer when enabled', () => {
-      config = createMockConfig({ enableWebSocket: true });
-      node = new MediatorNode(config);
-
-      expect(node.getWebSocketServer()).toBeDefined();
-    });
-
-    it('should return DisputeManager when enabled', () => {
-      config = createMockConfig({ enableDisputeSystem: true });
-      node = new MediatorNode(config);
-
-      expect(node.getDisputeManager()).toBeDefined();
-    });
-
-    it('should return GovernanceManager when enabled', () => {
-      config = createMockConfig({ enableGovernance: true });
-      node = new MediatorNode(config);
-
-      expect(node.getGovernanceManager()).toBeDefined();
-    });
-
-    it('should return HealthMonitor when enabled', () => {
-      config = createMockConfig({ enableMonitoring: true });
-      node = new MediatorNode(config);
-
-      expect(node.getHealthMonitor()).toBeDefined();
-    });
-
-    it('should return PerformanceAnalytics when enabled', () => {
-      config = createMockConfig({ enableMonitoring: true });
-      node = new MediatorNode(config);
-
-      expect(node.getPerformanceAnalytics()).toBeDefined();
     });
   });
 
@@ -1058,24 +710,6 @@ describe('MediatorNode', () => {
       jest.advanceTimersByTime(60000);
 
       expect(ChallengeManager.prototype.monitorChallenges).toHaveBeenCalled();
-    });
-  });
-
-  describe('sybil resistance monitoring', () => {
-    it('should start sybil resistance monitoring when enabled', async () => {
-      config = createMockConfig({ enableSybilResistance: true });
-      node = new MediatorNode(config);
-      const startPromise = node.start();
-      jest.advanceTimersByTime(100);
-      await startPromise;
-
-      // Sybil resistance should be active
-      expect(logger.info).toHaveBeenCalledWith(
-        'Mediator node started successfully',
-        expect.objectContaining({
-          sybilResistance: true,
-        })
-      );
     });
   });
 });

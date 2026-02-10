@@ -873,6 +873,7 @@ export interface MediatorConfig {
 
   // Monitoring & Analytics configuration
   enableMonitoring?: boolean; // Enable health and performance monitoring (default: true)
+  healthServerPort?: number; // Port for HTTP health server (e.g. 9090)
   monitoringHealthCheckInterval?: number; // Health check interval in ms (default: 30000)
   monitoringMetricsInterval?: number; // Performance metrics interval in ms (default: 10000)
   monitoringSnapshotRetention?: number; // Number of performance snapshots to keep (default: 100)

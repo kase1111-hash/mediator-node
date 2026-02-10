@@ -6,12 +6,18 @@
  */
 
 import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
-import { HealthMonitor } from './HealthMonitor';
 import { logger } from '../utils/logger';
 
 export interface HealthServerConfig {
   port: number;
   host?: string;
+}
+
+export interface HealthStatusProvider {
+  isRunning: boolean;
+  cachedIntents: number;
+  activeSettlements: number;
+  reputation: number;
 }
 
 /**
@@ -20,21 +26,28 @@ export interface HealthServerConfig {
  * Endpoints:
  * - GET /health - Full health report (JSON)
  * - GET /health/live - Liveness probe (returns 200 if process is running)
- * - GET /health/ready - Readiness probe (returns 200 if healthy, 503 if degraded/unhealthy)
+ * - GET /health/ready - Readiness probe (returns 200 if running, 503 if not)
  */
 export class HealthServer {
   private server: Server;
-  private healthMonitor: HealthMonitor;
   private config: Required<HealthServerConfig>;
+  private statusProvider: HealthStatusProvider | null = null;
+  private startTime: number = Date.now();
 
-  constructor(healthMonitor: HealthMonitor, config: HealthServerConfig) {
-    this.healthMonitor = healthMonitor;
+  constructor(config: HealthServerConfig) {
     this.config = {
       host: config.host || '0.0.0.0',
       ...config,
     };
 
     this.server = createServer((req, res) => this.handleRequest(req, res));
+  }
+
+  /**
+   * Set the status provider for health checks
+   */
+  public setStatusProvider(provider: HealthStatusProvider): void {
+    this.statusProvider = provider;
   }
 
   /**
@@ -95,13 +108,13 @@ export class HealthServer {
     try {
       switch (url) {
         case '/health':
-          await this.handleHealthCheck(res);
+          this.handleHealthCheck(res);
           break;
         case '/health/live':
           this.handleLivenessProbe(res);
           break;
         case '/health/ready':
-          await this.handleReadinessProbe(res);
+          this.handleReadinessProbe(res);
           break;
         default:
           res.writeHead(404, { 'Content-Type': 'application/json' });
@@ -119,12 +132,24 @@ export class HealthServer {
 
   /**
    * Full health check endpoint
-   * Returns complete health report
+   * Returns health report with basic node status
    */
-  private async handleHealthCheck(res: ServerResponse): Promise<void> {
-    const report = await this.healthMonitor.performHealthCheck();
+  private handleHealthCheck(res: ServerResponse): void {
+    const isRunning = this.statusProvider?.isRunning ?? false;
+    const status = isRunning ? 'healthy' : 'unhealthy';
+    const statusCode = isRunning ? 200 : 503;
 
-    const statusCode = report.status === 'healthy' ? 200 : report.status === 'degraded' ? 200 : 503;
+    const report = {
+      status,
+      timestamp: Date.now(),
+      uptime: Date.now() - this.startTime,
+      node: {
+        isRunning,
+        cachedIntents: this.statusProvider?.cachedIntents ?? 0,
+        activeSettlements: this.statusProvider?.activeSettlements ?? 0,
+        reputation: this.statusProvider?.reputation ?? 0,
+      },
+    };
 
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify(report, null, 2));
@@ -146,19 +171,16 @@ export class HealthServer {
 
   /**
    * Readiness probe endpoint
-   * Returns 200 if healthy/degraded, 503 if unhealthy
+   * Returns 200 if node is running, 503 if not
    */
-  private async handleReadinessProbe(res: ServerResponse): Promise<void> {
-    const report = await this.healthMonitor.performHealthCheck();
-
-    const isReady = report.status === 'healthy' || report.status === 'degraded';
+  private handleReadinessProbe(res: ServerResponse): void {
+    const isReady = this.statusProvider?.isRunning ?? false;
     const statusCode = isReady ? 200 : 503;
 
     res.writeHead(statusCode, { 'Content-Type': 'application/json' });
     res.end(
       JSON.stringify({
         status: isReady ? 'ready' : 'not_ready',
-        health: report.status,
         timestamp: Date.now(),
       })
     );
