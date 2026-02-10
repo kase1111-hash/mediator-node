@@ -16,8 +16,6 @@ export { VectorDatabase } from './mapping/VectorDatabase';
 export { LLMProvider } from './llm/LLMProvider';
 export { SettlementManager } from './settlement/SettlementManager';
 export { ReputationTracker } from './reputation/ReputationTracker';
-export { StakeManager } from './consensus/StakeManager';
-export { AuthorityManager } from './consensus/AuthorityManager';
 export { ChainClient } from './chain';
 
 export * from './types';
