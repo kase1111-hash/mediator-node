@@ -1,6 +1,6 @@
 {
   "name": "natlangchain-mediator-node",
-  "version": "0.1.0-alpha",
+  "version": "0.2.0-alpha-focused",
   "description": "A lightweight mediator node for NatLangChain that discovers, negotiates, and proposes alignments between explicit intents",
   "main": "dist/index.js",
   "bin": {
@@ -19,6 +19,7 @@
     "docker:down": "docker-compose down",
     "docker:logs": "docker-compose logs -f mediator-node",
     "mock-chain": "cd examples/mock-chain && npm install && npm start",
+    "demo": "ts-node demo/cross-project-demo.ts",
     "benchmark": "ts-node benchmark/core-operations.ts",
     "prepare": "husky"
   },

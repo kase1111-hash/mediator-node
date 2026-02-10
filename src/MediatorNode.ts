@@ -202,15 +202,19 @@ export class MediatorNode {
       }
 
       intentsProcessed = intents.length;
-      logger.info('Alignment cycle: Processing intents', { count: intents.length });
+      logger.info('Alignment cycle: Processing intents', { count: intents.length, ingestionMs: Date.now() - cycleStart });
 
       // Phase 2: Mapping - Generate embeddings and find candidates
+      const mappingStart = Date.now();
+      let embeddingsGenerated = 0;
+
       for (const intent of intents) {
         if (!this.embeddingCache.has(intent.hash)) {
           try {
             const embedding = await this.llmProvider.generateEmbedding(intent.prose);
             this.embeddingCache.set(intent.hash, embedding);
             await this.vectorDb.addIntent(intent, embedding);
+            embeddingsGenerated++;
           } catch (error) {
             logger.warn('Failed to generate embedding, skipping intent', {
               intentHash: intent.hash,
@@ -254,14 +258,23 @@ export class MediatorNode {
       }
 
       candidatesFound = candidates.length;
-      logger.info('Found alignment candidates', { count: candidates.length });
+      const mappingMs = Date.now() - mappingStart;
+      logger.info('Found alignment candidates', { count: candidates.length, embeddingsGenerated, mappingMs });
 
       // Phase 3: Negotiation - Simulate alignment for top candidates
+      const negotiationStart = Date.now();
+
       for (const candidate of candidates.slice(0, 3)) {
         negotiationsAttempted++;
         const submitted = await this.processAlignmentCandidate(candidate);
         if (submitted) settlementsSubmitted++;
       }
+
+      logger.info('Negotiation phase completed', {
+        negotiationMs: Date.now() - negotiationStart,
+        negotiationsAttempted,
+        settlementsSubmitted,
+      });
 
       // Cleanup old embeddings
       this.cleanupEmbeddingCache();

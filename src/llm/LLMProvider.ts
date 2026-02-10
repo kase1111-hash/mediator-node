@@ -249,6 +249,9 @@ export class LLMProvider {
       let response: string;
       let modelUsed: string;
 
+      let inputTokens = 0;
+      let outputTokens = 0;
+
       if (this.config.llmProvider === 'anthropic' && this.anthropic) {
         modelUsed = this.config.llmModel;
         const result = await this.anthropic.messages.create({
@@ -264,6 +267,8 @@ export class LLMProvider {
 
         const content = result.content[0];
         response = content.type === 'text' ? content.text : '';
+        inputTokens = result.usage?.input_tokens || 0;
+        outputTokens = result.usage?.output_tokens || 0;
       } else if (this.config.llmProvider === 'openai' && this.openai) {
         modelUsed = this.config.llmModel;
         const result = await this.openai.chat.completions.create({
@@ -282,6 +287,8 @@ export class LLMProvider {
         });
 
         response = result.choices[0].message.content || '';
+        inputTokens = result.usage?.prompt_tokens || 0;
+        outputTokens = result.usage?.completion_tokens || 0;
       } else {
         throw new Error('No LLM provider configured');
       }
@@ -296,6 +303,10 @@ export class LLMProvider {
         confidence: result.confidenceScore,
         intentA: intentA.hash,
         intentB: intentB.hash,
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        estimatedCostUsd: this.estimateCost(modelUsed, inputTokens, outputTokens),
       });
 
       return result;
@@ -512,5 +523,23 @@ Provide a 2-3 sentence summary of the essential agreement in plain language.`;
       logger.error('Error generating text', { error });
       throw error;
     }
+  }
+
+  /**
+   * Estimate USD cost for a given model and token counts.
+   * Prices are approximate per-1M-token rates as of 2024-12.
+   */
+  private estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+    const pricing: Record<string, { input: number; output: number }> = {
+      'claude-3-5-sonnet-20241022': { input: 3.0, output: 15.0 },
+      'claude-3-haiku-20240307': { input: 0.25, output: 1.25 },
+      'claude-3-opus-20240229': { input: 15.0, output: 75.0 },
+      'gpt-4o': { input: 2.5, output: 10.0 },
+      'gpt-4o-mini': { input: 0.15, output: 0.6 },
+      'gpt-4-turbo': { input: 10.0, output: 30.0 },
+    };
+
+    const rates = pricing[model] || { input: 3.0, output: 15.0 };
+    return (inputTokens * rates.input + outputTokens * rates.output) / 1_000_000;
   }
 }
