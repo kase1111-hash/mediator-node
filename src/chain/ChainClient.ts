@@ -472,6 +472,40 @@ export class ChainClient {
   }
 
   /**
+   * Get recent settlements from the chain
+   */
+  async getRecentSettlements(limit: number = 20): Promise<ProposedSettlement[]> {
+    try {
+      // Try getting open contracts first (these are proposed settlements)
+      try {
+        const response = await this.client.get(`/contract/list?status=open&limit=${limit}`);
+        const contracts = response.data?.contracts || response.data || [];
+        if (Array.isArray(contracts) && contracts.length > 0) {
+          return contracts.map((c: NatLangChainContract) => contractToSettlement(c));
+        }
+      } catch {
+        // Fall through to semantic search
+      }
+
+      // Fall back to semantic search
+      const response = await this.client.post('/search/semantic', {
+        query: 'settlement proposed',
+        top_k: limit,
+        field: 'both',
+      });
+
+      const results = response.data?.results || [];
+      return results
+        .filter((entry: any) => entry.metadata?.type === 'settlement')
+        .map((entry: any) => contractToSettlement(entry))
+        .filter((s: ProposedSettlement | null): s is ProposedSettlement => s !== null);
+    } catch (error) {
+      logger.error('Error fetching recent settlements', { error });
+      return [];
+    }
+  }
+
+  /**
    * Submit settlement payout
    */
   async submitPayout(

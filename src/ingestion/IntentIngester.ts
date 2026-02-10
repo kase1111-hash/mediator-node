@@ -1,7 +1,6 @@
 import { Intent, IntentStatus, MediatorConfig } from '../types';
 import { logger } from '../utils/logger';
 import { generateIntentHash } from '../utils/crypto';
-import { BurnManager } from '../burn/BurnManager';
 import { ChainClient } from '../chain';
 
 /**
@@ -13,12 +12,10 @@ export class IntentIngester {
   private intentCache: Map<string, Intent> = new Map();
   private lastPollTime: number = 0;
   private pollingInterval: NodeJS.Timeout | null = null;
-  private burnManager: BurnManager | null = null;
   private chainClient: ChainClient;
 
-  constructor(config: MediatorConfig, burnManager?: BurnManager, chainClient?: ChainClient) {
+  constructor(config: MediatorConfig, chainClient?: ChainClient) {
     this.config = config;
-    this.burnManager = burnManager || null;
     this.chainClient = chainClient || ChainClient.fromConfig(config);
   }
 
@@ -295,31 +292,7 @@ export class IntentIngester {
   }
 
   /**
-   * Preview burn amount required for intent submission
-   * @param userId - User ID submitting the intent
-   * @returns Burn calculation details
-   */
-  public previewIntentBurn(userId: string): {
-    amount: number;
-    isFree: boolean;
-    breakdown: {
-      baseBurn: number;
-      escalationMultiplier: number;
-      loadMultiplier: number;
-      submissionCount: number;
-    };
-  } | null {
-    if (!this.burnManager) {
-      logger.warn('BurnManager not available for burn preview');
-      return null;
-    }
-
-    return this.burnManager.calculateFilingBurn(userId);
-  }
-
-  /**
-   * Submit an intent to the chain with burn validation
-   * This method executes the required burn before submitting the intent
+   * Submit an intent to the chain
    * Uses ChainClient to submit to NatLangChain API
    *
    * @param intentData - Intent data to submit
@@ -333,12 +306,6 @@ export class IntentIngester {
     offeredFee?: number;
     branch?: string;
   }): Promise<Intent | null> {
-    // Validate burn manager is available
-    if (!this.burnManager) {
-      logger.error('Cannot submit intent: BurnManager not configured');
-      throw new Error('BurnManager required for intent submission');
-    }
-
     // Validate intent data
     if (!intentData.author || !intentData.prose || intentData.prose.length < 10) {
       logger.error('Invalid intent data', { author: intentData.author });
@@ -349,28 +316,12 @@ export class IntentIngester {
     const timestamp = Date.now();
     const intentHash = generateIntentHash(intentData.prose, intentData.author, timestamp);
 
-    // Preview burn requirement
-    const burnPreview = this.burnManager.calculateFilingBurn(intentData.author);
-
-    logger.info('Submitting intent with burn requirement', {
+    logger.info('Submitting intent', {
       author: intentData.author,
       intentHash,
-      burnRequired: burnPreview.amount,
-      isFree: burnPreview.isFree,
     });
 
     try {
-      // Execute burn (if required)
-      const burnResult = await this.burnManager.executeFilingBurn(
-        intentData.author,
-        intentHash
-      );
-
-      if (!burnPreview.isFree && !burnResult) {
-        logger.error('Burn execution failed', { intentHash });
-        throw new Error('Burn execution failed');
-      }
-
       // Construct intent object
       const intent: Intent = {
         hash: intentHash,
@@ -386,13 +337,12 @@ export class IntentIngester {
       };
 
       // Submit to chain using ChainClient
-      const result = await this.chainClient.submitIntent(intent, burnResult || undefined);
+      const result = await this.chainClient.submitIntent(intent);
 
       if (result.success) {
         logger.info('Intent submitted successfully', {
           hash: intentHash,
           author: intentData.author,
-          burnAmount: burnPreview.amount,
         });
 
         // Cache the intent locally
