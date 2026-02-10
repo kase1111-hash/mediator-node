@@ -2,7 +2,6 @@ import axios from 'axios';
 import { MediatorNode } from '../../src/MediatorNode';
 import { ConfigLoader } from '../../src/config/ConfigLoader';
 import { MediatorConfig } from '../../src/types';
-import * as path from 'path';
 import * as fs from 'fs';
 
 jest.mock('axios');
@@ -19,12 +18,32 @@ const mockAxiosInstance = {
   },
 };
 
+// Mock hnswlib-node (needed for VectorDatabase)
+jest.mock('hnswlib-node');
+
+// Mock logger to suppress output
+jest.mock('../../src/utils/logger', () => ({
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  },
+}));
+
 describe('Challenge Lifecycle Integration', () => {
   let mediatorNode: MediatorNode;
   let config: MediatorConfig;
   let testDbPath: string;
 
   beforeEach(() => {
+    jest.clearAllMocks();
+
+    // Wire up axios.create() to return the mock instance
+    mockedAxios.create.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosInstance.get.mockResolvedValue({ data: {} });
+    mockAxiosInstance.post.mockResolvedValue({ status: 200, data: {} });
+
     // Set up test environment
     process.env.CHAIN_ENDPOINT = 'https://test-chain.example.com';
     process.env.CHAIN_ID = 'test-chain';
@@ -48,7 +67,13 @@ describe('Challenge Lifecycle Integration', () => {
   });
 
   afterEach(async () => {
-    await mediatorNode.stop();
+    try {
+      if (mediatorNode) {
+        await mediatorNode.stop();
+      }
+    } catch {
+      // Node may not have been created successfully
+    }
 
     // Cleanup test database
     if (fs.existsSync(testDbPath)) {
@@ -183,13 +208,10 @@ describe('Challenge Lifecycle Integration', () => {
         severity: 'severe' as const,
       };
 
-      // Mock successful submission
-      mockedAxios.post.mockResolvedValue({
+      // Mock successful submission via ChainClient → axios instance
+      mockAxiosInstance.post.mockResolvedValue({
         status: 201,
-        data: {},
-        statusText: 'Created',
-        headers: {},
-        config: {} as any,
+        data: { hash: 'entry-hash-123', entry_id: 'entry-123' },
       });
 
       const result = await challengeManager.submitChallenge(settlement, analysis);
@@ -236,12 +258,9 @@ describe('Challenge Lifecycle Integration', () => {
       };
 
       // Mock submission
-      mockedAxios.post.mockResolvedValue({
+      mockAxiosInstance.post.mockResolvedValue({
         status: 201,
-        data: {},
-        statusText: 'Created',
-        headers: {},
-        config: {} as any,
+        data: { hash: 'entry-hash', entry_id: 'entry-1' },
       });
 
       await challengeManager.submitChallenge(settlement, analysis);
@@ -249,21 +268,18 @@ describe('Challenge Lifecycle Integration', () => {
       const challenges = challengeManager.getSubmittedChallenges();
       expect(challenges.length).toBe(1);
 
+      // Force update lastChecked to allow immediate monitoring
       const challengeId = challenges[0].challengeId;
+      (challenges[0] as any).lastChecked = 0;
 
-      // Mock status check - challenge upheld
-      mockedAxios.get.mockResolvedValue({
+      // Mock status check - getChallengeStatus uses POST /search/semantic
+      // Must include challenge_id for ChainClient to match the entry
+      mockAxiosInstance.post.mockResolvedValue({
         status: 200,
         data: {
-          status: 'upheld',
+          results: [{ metadata: { challenge_id: challengeId, status: 'upheld' } }],
         },
-        statusText: 'OK',
-        headers: {},
-        config: {} as any,
       });
-
-      // Force update lastChecked to allow immediate monitoring
-      (challenges[0] as any).lastChecked = 0;
 
       await challengeManager.monitorChallenges();
 
@@ -303,12 +319,9 @@ describe('Challenge Lifecycle Integration', () => {
         severity: 'moderate' as const,
       };
 
-      mockedAxios.post.mockResolvedValue({
+      mockAxiosInstance.post.mockResolvedValue({
         status: 201,
-        data: {},
-        statusText: 'Created',
-        headers: {},
-        config: {} as any,
+        data: { hash: 'entry-hash', entry_id: 'entry-1' },
       });
 
       await challengeManager.submitChallenge(settlement, analysis);

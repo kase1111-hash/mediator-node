@@ -2,6 +2,12 @@ import axios from 'axios';
 import { MediatorNode } from '../../src/MediatorNode';
 import { MediatorConfig, Intent, ProposedSettlement } from '../../src/types';
 import { createMockConfig, createMockIntent } from '../utils/testUtils';
+import { intentToEntry } from '../../src/chain/transformers';
+
+/** Convert Intent[] to a NatLangChain /pending response */
+function mockPendingResponse(intents: Intent[]) {
+  return { data: { entries: intents.map(i => intentToEntry(i)) } };
+}
 
 // Mock all external dependencies
 jest.mock('axios');
@@ -107,6 +113,11 @@ describe('Integration: Alignment Cycle', () => {
     jest.clearAllMocks();
     jest.useFakeTimers();
 
+    // Wire up axios.create() to return the mock instance
+    mockAxios.create.mockReturnValue(mockAxiosInstance as any);
+    mockAxiosInstance.get.mockResolvedValue({ data: {} });
+    mockAxiosInstance.post.mockResolvedValue({ status: 200, data: {} });
+
     config = createMockConfig({
       consensusMode: 'permissionless',
       chainEndpoint: 'https://chain.example.com',
@@ -152,12 +163,10 @@ describe('Integration: Alignment Cycle', () => {
       ];
 
       // Mock intent fetching
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
 
       // Mock settlement submission
-      mockAxios.post.mockResolvedValue({ status: 200 });
+      mockAxiosInstance.post.mockResolvedValue({ status: 200 });
 
       // Start the node
       await mediatorNode.start();
@@ -177,9 +186,7 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_3' }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
 
       await mediatorNode.start();
 
@@ -196,10 +203,8 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_2', prose: 'Second intent prose' }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
-      mockAxios.post.mockResolvedValue({ status: 200 });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
+      mockAxiosInstance.post.mockResolvedValue({ status: 200 });
 
       await mediatorNode.start();
 
@@ -225,16 +230,14 @@ describe('Integration: Alignment Cycle', () => {
         }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
-      mockAxios.post.mockResolvedValue({ status: 200 });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
+      mockAxiosInstance.post.mockResolvedValue({ status: 200 });
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
 
       // Should have attempted to process intents
-      expect(mockAxios.get).toHaveBeenCalled();
+      expect(mockAxiosInstance.get).toHaveBeenCalled();
     });
 
     it('should submit settlement after successful negotiation', async () => {
@@ -243,16 +246,14 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_b', offeredFee: 5 }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
-      mockAxios.post.mockResolvedValue({ status: 200 });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
+      mockAxiosInstance.post.mockResolvedValue({ status: 200 });
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
 
       // Should have made API calls
-      expect(mockAxios.get).toHaveBeenCalled();
+      expect(mockAxiosInstance.get).toHaveBeenCalled();
     });
   });
 
@@ -267,10 +268,8 @@ describe('Integration: Alignment Cycle', () => {
         })
       );
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
-      mockAxios.post.mockResolvedValue({ status: 200 });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
+      mockAxiosInstance.post.mockResolvedValue({ status: 200 });
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
@@ -288,9 +287,7 @@ describe('Integration: Alignment Cycle', () => {
         }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
@@ -307,10 +304,8 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'med_fee', offeredFee: 5 }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
-      mockAxios.post.mockResolvedValue({ status: 200 });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
+      mockAxiosInstance.post.mockResolvedValue({ status: 200 });
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
@@ -328,12 +323,10 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_2' }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
 
       // First call fails, second succeeds
-      mockAxios.post
+      mockAxiosInstance.post
         .mockRejectedValueOnce(new Error('LLM API error'))
         .mockResolvedValue({ status: 200 });
 
@@ -346,7 +339,7 @@ describe('Integration: Alignment Cycle', () => {
     });
 
     it('should handle intent fetching errors gracefully', async () => {
-      mockAxios.get.mockRejectedValue(new Error('Network error'));
+      mockAxiosInstance.get.mockRejectedValue(new Error('Network error'));
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(15000);
@@ -362,10 +355,8 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_b' }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
-      mockAxios.post.mockRejectedValue(new Error('Chain API error'));
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
+      mockAxiosInstance.post.mockRejectedValue(new Error('Chain API error'));
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
@@ -380,9 +371,7 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_1' }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
@@ -402,9 +391,7 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_3' }),
       ];
 
-      mockAxios.get.mockResolvedValueOnce({
-        data: { intents: initialIntents },
-      });
+      mockAxiosInstance.get.mockResolvedValueOnce(mockPendingResponse(initialIntents));
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
@@ -414,9 +401,7 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_1' }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: updatedIntents },
-      });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(updatedIntents));
 
       await jest.advanceTimersByTimeAsync(35000);
 
@@ -426,9 +411,7 @@ describe('Integration: Alignment Cycle', () => {
     });
 
     it('should clear intervals on stop', async () => {
-      mockAxios.get.mockResolvedValue({
-        data: { intents: [] },
-      });
+      mockAxiosInstance.get.mockResolvedValue({ data: { entries: [] } });
 
       await mediatorNode.start();
       expect(mediatorNode.getStatus().isRunning).toBe(true);
@@ -442,9 +425,7 @@ describe('Integration: Alignment Cycle', () => {
     });
 
     it('should save vector database on stop', async () => {
-      mockAxios.get.mockResolvedValue({
-        data: { intents: [] },
-      });
+      mockAxiosInstance.get.mockResolvedValue({ data: { entries: [] } });
 
       await mediatorNode.start();
       await mediatorNode.stop();
@@ -458,9 +439,7 @@ describe('Integration: Alignment Cycle', () => {
     });
 
     it('should handle multiple stop calls gracefully', async () => {
-      mockAxios.get.mockResolvedValue({
-        data: { intents: [] },
-      });
+      mockAxiosInstance.get.mockResolvedValue({ data: { entries: [] } });
 
       await mediatorNode.start();
       await mediatorNode.stop();
@@ -470,9 +449,7 @@ describe('Integration: Alignment Cycle', () => {
 
   describe('Cycle Timing and Intervals', () => {
     it('should run alignment cycle every 30 seconds', async () => {
-      mockAxios.get.mockResolvedValue({
-        data: { intents: [] },
-      });
+      mockAxiosInstance.get.mockResolvedValue({ data: { entries: [] } });
 
       await mediatorNode.start();
 
@@ -491,9 +468,9 @@ describe('Integration: Alignment Cycle', () => {
 
     it('should poll for intents every 10 seconds', async () => {
       let pollCount = 0;
-      mockAxios.get.mockImplementation(() => {
+      mockAxiosInstance.get.mockImplementation(() => {
         pollCount++;
-        return Promise.resolve({ data: { intents: [] } });
+        return Promise.resolve({ data: { entries: [] } });
       });
 
       await mediatorNode.start();
@@ -508,9 +485,7 @@ describe('Integration: Alignment Cycle', () => {
     });
 
     it('should monitor settlements every 60 seconds', async () => {
-      mockAxios.get.mockResolvedValue({
-        data: { intents: [] },
-      });
+      mockAxiosInstance.get.mockResolvedValue({ data: { entries: [] } });
 
       await mediatorNode.start();
 
@@ -537,16 +512,14 @@ describe('Integration: Alignment Cycle', () => {
         }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
-      mockAxios.post.mockResolvedValue({ status: 200 });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
+      mockAxiosInstance.post.mockResolvedValue({ status: 200 });
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
 
       // Verify settlement structure
-      const settlementCall = mockAxios.post.mock.calls.find(
+      const settlementCall = mockAxiosInstance.post.mock.calls.find(
         call => call[1] && (call[1] as any).type === 'settlement'
       );
 
@@ -584,27 +557,25 @@ describe('Integration: Alignment Cycle', () => {
         createMockIntent({ hash: 'intent_b' }),
       ];
 
-      mockAxios.get.mockResolvedValue({
-        data: { intents: mockIntents },
-      });
+      mockAxiosInstance.get.mockResolvedValue(mockPendingResponse(mockIntents));
 
       await mediatorNode.start();
       await jest.advanceTimersByTimeAsync(35000);
 
       // Should not submit settlement
-      const settlementCalls = mockAxios.post.mock.calls.filter(
+      const settlementCalls = mockAxiosInstance.post.mock.calls.filter(
         call => call[1] && (call[1] as any).type === 'settlement'
       );
 
       // May or may not submit depending on other candidates
-      expect(mockAxios.get).toHaveBeenCalled();
+      expect(mockAxiosInstance.get).toHaveBeenCalled();
     });
   });
 
   describe('Status and Monitoring', () => {
     it('should provide accurate status information', async () => {
       // Mock both intent and reputation API calls
-      mockAxios.get.mockImplementation((url: string) => {
+      mockAxiosInstance.get.mockImplementation((url: string) => {
         if (url.includes('/reputation/')) {
           return Promise.resolve({
             data: {
@@ -616,9 +587,9 @@ describe('Integration: Alignment Cycle', () => {
             },
           });
         }
-        return Promise.resolve({
-          data: { intents: [createMockIntent(), createMockIntent()] },
-        });
+        return Promise.resolve(
+          mockPendingResponse([createMockIntent(), createMockIntent()])
+        );
       });
 
       await mediatorNode.start();
@@ -630,19 +601,15 @@ describe('Integration: Alignment Cycle', () => {
       expect(status).toHaveProperty('cachedIntents');
       expect(status).toHaveProperty('activeSettlements');
       expect(status).toHaveProperty('reputation');
-      expect(status).toHaveProperty('effectiveStake');
 
       expect(status.isRunning).toBe(true);
       expect(typeof status.cachedIntents).toBe('number');
       expect(typeof status.activeSettlements).toBe('number');
       expect(typeof status.reputation).toBe('number');
-      expect(typeof status.effectiveStake).toBe('number');
     });
 
     it('should update status after intents are cached', async () => {
-      mockAxios.get.mockResolvedValue({
-        data: { intents: [] },
-      });
+      mockAxiosInstance.get.mockResolvedValue({ data: { entries: [] } });
 
       await mediatorNode.start();
 
@@ -650,14 +617,12 @@ describe('Integration: Alignment Cycle', () => {
       const beforeCount = beforeStatus.cachedIntents;
 
       // Add intents
-      mockAxios.get.mockResolvedValue({
-        data: {
-          intents: [
-            createMockIntent({ hash: 'intent_1' }),
-            createMockIntent({ hash: 'intent_2' }),
-          ],
-        },
-      });
+      mockAxiosInstance.get.mockResolvedValue(
+        mockPendingResponse([
+          createMockIntent({ hash: 'intent_1' }),
+          createMockIntent({ hash: 'intent_2' }),
+        ])
+      );
 
       await jest.advanceTimersByTimeAsync(15000);
 

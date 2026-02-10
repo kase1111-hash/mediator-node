@@ -5,10 +5,10 @@ A simple mock HTTP server that implements the NatLangChain API for testing and d
 ## Purpose
 
 This mock server allows you to:
-- Test the mediator-node without a full blockchain
+- Test the mediator-node without a full NatLangChain instance
 - Develop and debug integration issues locally
-- Simulate various chain scenarios
-- Demonstrate the mediation cycle
+- Simulate the mediation cycle (matching, proposal, acceptance, payout)
+- Demo the four-stage alignment cycle
 
 ## Installation
 
@@ -27,43 +27,70 @@ npm start
 PORT=9000 npm start
 ```
 
-The server will start on port 8545 (or your specified port) with example intents pre-loaded.
+The server will start on port 8545 (or your specified port) with example entries pre-loaded.
 
 ## API Endpoints
 
-### Chain Endpoints
-- `GET /api/v1/intents` - List intents
-- `POST /api/v1/entries` - Submit entries (settlements, accepts, etc.)
-- `GET /api/v1/settlements/:id/status` - Get settlement status
-- `GET /api/v1/reputation/:mediatorId` - Get reputation
-- `POST /api/v1/reputation` - Update reputation
-- `GET /api/v1/delegations/:mediatorId` - Get delegations
-- `POST /api/v1/stake/bond` - Bond stake
-- `POST /api/v1/stake/unbond` - Unbond stake
-- `GET /api/v1/consensus/authorities` - Get authority list
-- `POST /api/v1/governance/proposals` - Submit proposal
+These match the NatLangChain post-refocus API surface.
+
+### Entry Operations
+- `POST /entry` - Submit any entry (intents, settlements, challenges, payouts)
+- `GET /pending` - Get pending unmined entries
+- `GET /entries/search?intent=<keyword>` - Search entries by keyword
+- `GET /entries/author/:author` - Get entries by author
+
+### Semantic Search
+- `POST /search/semantic` - Meaning-based search (mock uses substring matching)
+
+### Contract Operations
+- `GET /contract/list?status=open` - List contracts (filter by status)
+- `POST /contract/propose` - Submit contract proposal
+- `POST /contract/respond` - Accept or reject a contract
+- `POST /contract/payout` - Claim payout for a closed contract
+- `POST /contract/match` - Find matching contracts
+- `POST /contract/parse` - Parse natural language contract
+
+### Chain Operations
+- `GET /chain` - Get full blockchain (blocks + entries)
+- `GET /chain/narrative` - Human-readable chain history
+- `GET /validate/chain` - Validate chain integrity
+
+### Status
 - `GET /health` - Health check
+- `GET /stats` - Chain statistics
+
+### Reputation (mediator-side)
+- `GET /reputation/:mediatorId` - Get reputation
+- `POST /reputation` - Update reputation
 
 ### Admin Endpoints (Testing)
 - `POST /admin/add-intent` - Add a test intent
 - `POST /admin/accept-settlement` - Simulate party acceptance
+- `POST /admin/mine` - Trigger mining of pending entries
 - `POST /admin/reset` - Reset to initial state
+
+### Deprecated Aliases
+The following `/api/v1/*` routes are kept as temporary aliases and will be removed:
+- `GET /api/v1/intents` → use `GET /pending`
+- `POST /api/v1/entries` → use `POST /entry`
+- `GET /api/v1/settlements/:id/status` → use `POST /search/semantic`
+- `GET /api/v1/reputation/:mediatorId` → use `GET /reputation/:mediatorId`
 
 ## Example Data
 
-The server initializes with 3 example intents:
+The server initializes with 3 example entries in NatLangChain format:
 
-1. **Rust Fluid Dynamics Library** (Alice)
+1. **Rust Fluid Dynamics Library** (Alice) - `contract_type: offer`
    - Offering a high-performance library
    - Looking for 500 NLC or open-source usage
    - Professional/Engineering
 
-2. **Ocean Simulation Needed** (Bob)
+2. **Ocean Simulation Needed** (Bob) - `contract_type: seek`
    - Need for climate research
    - Budget: 800 NLC
    - Research/Climate
 
-3. **Data Visualization** (Charlie)
+3. **Data Visualization** (Charlie) - `contract_type: seek`
    - Interactive charts needed
    - Budget: 300 NLC
    - Professional/Design
@@ -98,30 +125,19 @@ npm start
 ```
 
 4. Watch the logs - you should see:
-   - Intents being ingested
+   - Entries fetched from `/pending`
    - Embeddings generated
    - Alignment candidates found
    - Negotiation happening
-   - Settlement proposed
+   - Contract proposed via `/contract/propose` or `/entry`
 
-## Simulating Party Acceptance
-
-To simulate both parties accepting a settlement:
+## Simulating the Full Cycle
 
 ```bash
-curl -X POST http://localhost:8545/admin/accept-settlement \
-  -H "Content-Type: application/json" \
-  -d '{
-    "settlementId": "SETTLEMENT_ID_HERE",
-    "party": "both"
-  }'
-```
+# 1. Check pending entries
+curl http://localhost:8545/pending
 
-The mediator will detect acceptance and claim the fee.
-
-## Adding Test Intents
-
-```bash
+# 2. Add a new intent
 curl -X POST http://localhost:8545/admin/add-intent \
   -H "Content-Type: application/json" \
   -d '{
@@ -132,51 +148,43 @@ curl -X POST http://localhost:8545/admin/add-intent \
     "offeredFee": 10,
     "branch": "Test/Example"
   }'
-```
 
-## Resetting Data
+# 3. Mine pending entries into a block
+curl -X POST http://localhost:8545/admin/mine
 
-To reset to the initial example state:
+# 4. View the blockchain
+curl http://localhost:8545/chain
 
-```bash
+# 5. Semantic search
+curl -X POST http://localhost:8545/search/semantic \
+  -H "Content-Type: application/json" \
+  -d '{"query": "fluid dynamics simulation", "top_k": 5}'
+
+# 6. Accept a settlement (after mediator proposes one)
+curl -X POST http://localhost:8545/admin/accept-settlement \
+  -H "Content-Type: application/json" \
+  -d '{"settlementId": "SETTLEMENT_ID_HERE", "party": "both"}'
+
+# 7. Reset to initial state
 curl -X POST http://localhost:8545/admin/reset
 ```
 
 ## Console Output
 
 The server logs all activity:
-- `[CHAIN]` - Chain operations (settlements, payouts, etc.)
+- `[CHAIN]` - Chain operations (entries, contracts, mining, payouts)
 - `[ADMIN]` - Admin operations
-- Incoming HTTP requests
-
-## Integration with Tests
-
-You can use this mock server in integration tests:
-
-```javascript
-const axios = require('axios');
-const MOCK_CHAIN = 'http://localhost:8545';
-
-// In your test
-beforeAll(async () => {
-  // Reset chain state
-  await axios.post(`${MOCK_CHAIN}/admin/reset`);
-});
-
-test('mediator proposes settlement', async () => {
-  // Add test intents
-  // Start mediator
-  // Verify settlement created
-});
-```
+- `[DEPRECATED]` - Calls to deprecated `/api/v1/*` aliases
+- `[AUDIT]` - All HTTP requests
 
 ## Limitations
 
 This is a simple in-memory mock server for development. It does NOT:
 - Persist data to disk
-- Implement actual blockchain consensus
+- Implement actual blockchain consensus or SHA-256 chaining
 - Handle cryptographic verification (signatures accepted without validation)
+- Perform real semantic search (uses substring matching)
 - Support P2P networking
 - Scale to production workloads
 
-For production, use a real NatLangChain node implementation.
+For production, use a real NatLangChain node instance.
