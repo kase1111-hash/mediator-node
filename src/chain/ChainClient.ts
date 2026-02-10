@@ -18,7 +18,7 @@
  */
 
 import axios, { AxiosInstance, AxiosError } from 'axios';
-import { Intent, ProposedSettlement, Challenge, MediatorConfig, BurnTransaction } from '../types';
+import { Intent, ProposedSettlement, Challenge, MediatorConfig, BurnTransaction, AlignmentCandidate } from '../types';
 import { logger } from '../utils/logger';
 import { generateSignature } from '../utils/crypto';
 import { CircuitBreaker, CircuitBreakerStats, CircuitOpenError } from '../utils/circuit-breaker';
@@ -354,6 +354,58 @@ export class ChainClient {
       return contracts.map((c: NatLangChainContract) => contractToSettlement(c));
     } catch (error) {
       logger.error('Error fetching open contracts', { error });
+      return [];
+    }
+  }
+
+  /**
+   * Get match candidates from the chain's autonomous matching
+   * Uses POST /contract/match to find potential alignment pairs
+   */
+  async getMatchCandidates(
+    content: string,
+    topK: number = 5
+  ): Promise<AlignmentCandidate[]> {
+    try {
+      const response = await this.client.post('/contract/match', {
+        content,
+        top_k: topK,
+      });
+
+      const matches: NatLangChainContract[] = response.data?.matches || [];
+      const candidates: AlignmentCandidate[] = [];
+
+      // Resolve intent pairs from contract references in parallel
+      const resolvePromises = matches.map(async (match) => {
+        if (!match.offer_ref || !match.seek_ref) return null;
+
+        const [intentA, intentB] = await Promise.all([
+          this.getIntent(match.offer_ref),
+          this.getIntent(match.seek_ref),
+        ]);
+
+        if (!intentA || !intentB) return null;
+
+        return {
+          intentA,
+          intentB,
+          similarityScore: match.match_score || 0,
+          estimatedValue: match.facilitation_fee || 0,
+          priority: match.match_score || 0,
+          reason: 'chain-sourced match',
+        } as AlignmentCandidate;
+      });
+
+      const results = await Promise.all(resolvePromises);
+      for (const result of results) {
+        if (result) candidates.push(result);
+      }
+
+      return candidates;
+    } catch (error) {
+      logger.debug('Chain match candidates not available', {
+        error: error instanceof Error ? error.message : 'Unknown',
+      });
       return [];
     }
   }

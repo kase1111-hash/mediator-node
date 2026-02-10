@@ -5,8 +5,33 @@
  * This module provides bidirectional transformations.
  */
 
+import { z } from 'zod';
 import { Intent, IntentStatus, ProposedSettlement, Challenge } from '../types';
 import { generateIntentHash } from '../utils/crypto';
+import { logger } from '../utils/logger';
+
+/**
+ * Zod schema for validating incoming NatLangChain entries at the boundary.
+ * Uses safeParse — malformed entries are logged but still processed defensively.
+ */
+const NatLangChainEntrySchema = z.object({
+  content: z.string().min(1).max(50000),
+  author: z.string().min(1).max(256),
+  intent: z.string().max(1000).default(''),
+  timestamp: z.number().positive().optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+
+/**
+ * Zod schema for validating incoming NatLangChain contracts.
+ */
+const NatLangChainContractSchema = z.object({
+  contract_id: z.string().max(256).optional(),
+  offer_ref: z.string().max(256).optional(),
+  seek_ref: z.string().max(256).optional(),
+  status: z.string().max(50).optional(),
+  timestamp: z.number().positive().optional(),
+}).passthrough();
 
 /**
  * NatLangChain Entry structure (as received from chain)
@@ -69,6 +94,14 @@ export interface NatLangChainBlock {
  * Transform NatLangChain Entry to Mediator Intent
  */
 export function entryToIntent(entry: NatLangChainEntry): Intent {
+  const validation = NatLangChainEntrySchema.safeParse(entry);
+  if (!validation.success) {
+    logger.warn('Malformed NatLangChain entry, processing defensively', {
+      errors: validation.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
+      author: typeof entry.author === 'string' ? entry.author.substring(0, 50) : undefined,
+    });
+  }
+
   const timestamp = entry.timestamp || Date.now();
   const hash = entry.metadata?.hash || generateIntentHash(entry.content, entry.author, timestamp);
 
@@ -125,6 +158,14 @@ export function intentToEntry(intent: Intent): NatLangChainEntry {
  * Transform NatLangChain Contract to ProposedSettlement
  */
 export function contractToSettlement(contract: NatLangChainContract): ProposedSettlement {
+  const validation = NatLangChainContractSchema.safeParse(contract);
+  if (!validation.success) {
+    logger.warn('Malformed NatLangChain contract, processing defensively', {
+      errors: validation.error.issues.map(i => `${i.path.join('.')}: ${i.message}`),
+      contractId: typeof contract.contract_id === 'string' ? contract.contract_id : undefined,
+    });
+  }
+
   return {
     id: contract.contract_id || '',
     intentHashA: contract.offer_ref || '',
@@ -416,36 +457,40 @@ Timestamp: ${new Date().toISOString()}`;
  * Parse intents from NatLangChain response formats
  */
 export function parseIntentsFromResponse(response: any): Intent[] {
+  const transformItem = (item: any): Intent | null => {
+    if (item.content && item.author) {
+      return entryToIntent(item as NatLangChainEntry);
+    }
+    // Already an Intent-shaped object
+    if (item.hash && item.prose && item.author) {
+      return item as Intent;
+    }
+    logger.warn('Skipping unrecognized item in response', {
+      hasContent: !!item.content,
+      hasAuthor: !!item.author,
+      hasHash: !!item.hash,
+    });
+    return null;
+  };
+
+  const filterNulls = (items: (Intent | null)[]): Intent[] =>
+    items.filter((i): i is Intent => i !== null);
+
   // Handle different response formats
   if (Array.isArray(response)) {
-    return response.map(item => {
-      if (item.content && item.author) {
-        return entryToIntent(item as NatLangChainEntry);
-      }
-      return item as Intent;
-    });
+    return filterNulls(response.map(transformItem));
   }
 
   if (response.entries && Array.isArray(response.entries)) {
-    return response.entries.map((entry: NatLangChainEntry) => entryToIntent(entry));
+    return filterNulls(response.entries.map(transformItem));
   }
 
   if (response.intents && Array.isArray(response.intents)) {
-    return response.intents.map((item: any) => {
-      if (item.content && item.author) {
-        return entryToIntent(item as NatLangChainEntry);
-      }
-      return item as Intent;
-    });
+    return filterNulls(response.intents.map(transformItem));
   }
 
   if (response.results && Array.isArray(response.results)) {
-    return response.results.map((item: any) => {
-      if (item.content && item.author) {
-        return entryToIntent(item as NatLangChainEntry);
-      }
-      return item as Intent;
-    });
+    return filterNulls(response.results.map(transformItem));
   }
 
   return [];

@@ -1,578 +1,227 @@
 # NatLangChain Mediator Node
 
-An **LLM mediator** and **AI negotiation node** for the NatLangChain protocol. This **semantic matching engine** enables **natural language mediation** between parties, providing **automated deal closure** through an **AI arbitration system** using a **linguistic negotiation protocol**.
+An LLM-powered mediator that discovers, negotiates, and proposes alignments between explicit intents on the [NatLangChain](https://github.com/kase1111-hash/NatLangChain) protocol.
 
-## Purpose
+## What It Does
 
-The Mediator Node is a standalone **LLM-powered deal matching** service that:
-- Connects to one or more NatLangChain instances (local or remote)
-- Runs **AI mediation for agreements** (matching, negotiation, closure proposals)
-- Performs "mining" by submitting successful mediation blocks
-- Earns facilitation fees when settlements are accepted
-- Enables **automated contract negotiation** — **pure mediation service**
+The Mediator Node connects to a NatLangChain instance and runs the **four-stage alignment cycle**:
 
-## Features
+1. **Ingestion** — Polls the chain for pending intents (human-authored prose describing desired outcomes)
+2. **Mapping** — Generates semantic embeddings and finds high-probability alignment candidates
+3. **Negotiation** — Runs LLM-simulated dialogue to determine if two intents can be aligned, proposes specific terms
+4. **Submission** — Publishes the proposed settlement to the chain with a 72-hour acceptance window
 
-### Core Capabilities
-- **Intent Ingestion**: Monitors the blockchain for pending intents
-- **Semantic Mapping**: Uses vector embeddings for **semantic proposal generation** and high-probability alignments
-- **LLM Negotiation**: Simulates multi-turn dialogue enabling **natural language arbitration** for viable settlements
-- **Settlement Proposals**: Publishes proposed settlements to the chain
-- **Fee Collection**: Claims facilitation fees when both parties accept
-
-### Consensus Modes
-- **Permissionless** (default): Pure Proof-of-Alignment + Reputation
-- **DPoS**: Delegated Proof-of-Stake with governance voting
-- **PoA**: Proof-of-Authority for permissioned environments
-- **Hybrid**: Configurable combinations (e.g., PoA + DPoS)
-
-### Advanced Features
-- Receipt-based reputation system (MP-01)
-- Stake and delegation management
-- Challenge window for contradiction proofs
-- Semantic consensus verification for high-value settlements
-- Governance proposal handling with stake-weighted voting
-- Multi-chain orchestration support
-
-### Protocol Extensions (Fully Implemented)
-- **MP-02**: Proof-of-Effort Receipt Protocol - Temporal effort tracking
-- **MP-03**: Dispute & Escalation System - Clarification, evidence, and escalation
-- **MP-04**: Licensing & Delegation Protocol - License management and delegation
-- **MP-05**: Settlement & Capitalization Protocol - Settlement coordination
-- **MP-06**: Behavioral Pressure & Anti-Entropy Controls - Token burn economics
-
-### Security Apps Integration
-- **[Boundary Daemon](https://github.com/kase1111-hash/boundary-daemon-)**: Policy enforcement and audit logging
-  - Environment monitoring (network state, USB devices, processes)
-  - Six boundary modes (OPEN → LOCKDOWN)
-  - Tamper-evident cryptographic audit trails
-- **[Boundary SIEM](https://github.com/kase1111-hash/Boundary-SIEM)**: Security event management
-  - Real-time event correlation with blockchain-specific detection rules
-  - MITRE ATT&CK tactic/technique mapping
-  - Multi-protocol alerting (webhooks, Slack, email)
-
-### Infrastructure
-- Real-time WebSocket event streaming
-- Health monitoring with Kubernetes-compatible probes
-- Automated security vulnerability scanning
-- Performance benchmarking and analytics
-- Log rotation with daily archive
-- CI/CD with GitHub Actions
+When both parties accept a settlement, the mediator earns a facilitation fee.
 
 ## Quick Start
 
-### Windows (One-Click)
+### 1. Prerequisites
 
-```batch
-REM Build the project
-build.bat
-
-REM Run the mediator
-run.bat
-
-REM Or start mock chain for testing
-run.bat mock
-```
-
-### Docker Compose
-
-Get running in under 5 minutes with Docker Compose:
-
-```bash
-# Clone and enter repository
-git clone https://github.com/kase1111-hash/mediator-node.git
-cd mediator-node
-
-# Set your API key
-export ANTHROPIC_API_KEY=your-key-here
-
-# Start mock chain + mediator
-docker-compose up
-```
-
-Watch it work:
-```bash
-docker-compose logs -f mediator-node
-```
-
-## Installation
-
-### Prerequisites
 - Node.js 18+
-- NatLangChain node access (API endpoint) or use our [mock chain](./examples/mock-chain)
-- LLM API key (Anthropic Claude or OpenAI)
-- Optional: Bonded stake (for DPoS) or authority key (for PoA)
+- An LLM API key (Anthropic Claude or OpenAI)
 
-### Setup
+### 2. Install
 
-1. **Clone the repository**
 ```bash
 git clone https://github.com/kase1111-hash/mediator-node.git
 cd mediator-node
-```
-
-2. **Install dependencies**
-```bash
 npm install
-```
-
-3. **Initialize configuration**
-```bash
-npm run init
-```
-
-4. **Edit `.env` file**
-```bash
-# Edit with your settings
-nano .env
-```
-
-Key configuration variables:
-- `CHAIN_ENDPOINT`: Your NatLangChain node URL (or `http://localhost:8545` for mock)
-- `CONSENSUS_MODE`: permissionless | dpos | poa | hybrid
-- `LLM_PROVIDER`: anthropic | openai
-- `ANTHROPIC_API_KEY` or `OPENAI_API_KEY`: Your API key
-- `MEDIATOR_PRIVATE_KEY`: Your mediator identity
-- `FACILITATION_FEE_PERCENT`: Fee percentage (e.g., 1.0 for 1%)
-
-**Embedding Configuration** (required for Anthropic users):
-- `EMBEDDING_PROVIDER`: openai | voyage | cohere | fallback (default: fallback)
-- `EMBEDDING_API_KEY`: API key for embedding provider (if different from LLM key)
-- `EMBEDDING_MODEL`: Model name (e.g., `text-embedding-3-small`, `voyage-2`, `embed-english-v3.0`)
-
-> ⚠️ **Production Warning**: The `fallback` embedding provider uses a naive character-based algorithm unsuitable for production semantic matching. Always configure `EMBEDDING_PROVIDER=openai` (or voyage/cohere) for production deployments.
-
-**Timing Configuration** (optional):
-- `ALIGNMENT_CYCLE_INTERVAL_MS`: Alignment cycle interval (default: 30000ms)
-- `INTENT_POLLING_INTERVAL_MS`: Intent polling interval (default: 10000ms)
-- `SETTLEMENT_MONITORING_INTERVAL_MS`: Settlement monitoring interval (default: 60000ms)
-
-**Threshold Configuration** (optional):
-- `MIN_NEGOTIATION_CONFIDENCE`: Minimum LLM confidence score 0-100 (default: 60)
-- `MAX_INTENT_FLAGS`: Maximum flags before intent is unalignable (default: 5)
-- `MIN_INTENT_PROSE_LENGTH`: Minimum prose length in characters (default: 50)
-
-5. **Build the project**
-```bash
 npm run build
 ```
 
-## Usage
+### 3. Run the Demo
 
-### Option 1: Docker Compose (Recommended for Testing)
-
-Start everything with one command:
+The fastest way to see the alignment cycle in action:
 
 ```bash
-# Set your API key
-export ANTHROPIC_API_KEY=your-key-here
-
-# Start mock chain + mediator
-docker-compose up
-```
-
-The system will start a mock chain with example intents and begin the alignment cycle automatically.
-
-### Option 2: Local Development
-
-**Terminal 1** - Start mock chain (for testing):
-```bash
+# Terminal 1: Start the mock chain
 npm run mock-chain
+
+# Terminal 2: Run the end-to-end demo
+npm run demo
 ```
 
-**Terminal 2** - Start the mediator:
+The demo walks through every phase of the alignment cycle against the mock chain, producing clear output at each step. It works without an LLM API key (using simulated negotiation).
+
+To run with a real LLM:
+
 ```bash
+ANTHROPIC_API_KEY=your-key npm run demo
+```
+
+### 4. Run as a Service
+
+```bash
+# Copy and edit the environment config
+cp .env.example .env
+nano .env
+
+# Start the mediator
 npm start
 ```
 
-### Other Commands
+### 5. Docker Compose
 
 ```bash
-# Check mediator status
-npm run status
-
-# Development mode with hot reload
-npm run dev
-
-# Start with custom config
-node dist/cli.js start --config ./my-config.env
-
-# Run as daemon
-node dist/cli.js start --daemon
-
-# Docker commands
-npm run docker:up      # Start with Docker
-npm run docker:logs    # View logs
-npm run docker:down    # Stop
+export ANTHROPIC_API_KEY=your-key-here
+docker-compose up
 ```
+
+## Configuration
+
+Key environment variables:
+
+| Variable | Required | Default | Description |
+|----------|----------|---------|-------------|
+| `CHAIN_ENDPOINT` | Yes | — | NatLangChain node URL (or `http://localhost:8545` for mock) |
+| `CHAIN_ID` | Yes | — | Chain identifier |
+| `LLM_PROVIDER` | No | `anthropic` | `anthropic` or `openai` |
+| `ANTHROPIC_API_KEY` | Yes* | — | Anthropic API key (*if provider is anthropic) |
+| `OPENAI_API_KEY` | Yes* | — | OpenAI API key (*if provider is openai) |
+| `MEDIATOR_PRIVATE_KEY` | Yes | — | Mediator identity private key |
+| `MEDIATOR_PUBLIC_KEY` | Yes | — | Mediator identity public key |
+| `FACILITATION_FEE_PERCENT` | No | `1.0` | Fee percentage earned on successful settlements |
+| `EMBEDDING_PROVIDER` | No | `fallback` | `openai`, `voyage`, `cohere`, or `fallback` |
+| `EMBEDDING_API_KEY` | No | — | API key for embedding provider |
+| `ALIGNMENT_CYCLE_INTERVAL_MS` | No | `30000` | Alignment cycle interval in milliseconds |
+| `MIN_NEGOTIATION_CONFIDENCE` | No | `60` | Minimum LLM confidence score (0-100) |
+| `LOG_LEVEL` | No | `info` | `debug`, `info`, `warn`, or `error` |
+
+> **Note:** The `fallback` embedding provider uses a naive character-based algorithm unsuitable for production. Configure `EMBEDDING_PROVIDER=openai` for production deployments.
 
 ## Architecture
 
-The Mediator Node implements the **four-stage Alignment Cycle**:
+```
+┌─────────────────────────────────────────────────────────┐
+│                    MediatorNode                          │
+│                                                         │
+│  ┌─────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │  Ingester   │→ │  VectorDB    │→ │  LLMProvider  │  │
+│  │  (polling)  │  │  (mapping)   │  │  (negotiate)  │  │
+│  └─────────────┘  └──────────────┘  └──────────────┘   │
+│          │                                    │         │
+│          ▼                                    ▼         │
+│  ┌─────────────┐                   ┌──────────────┐    │
+│  │  Reputation  │                  │  Settlement   │    │
+│  │  Tracker     │                  │  Manager      │    │
+│  └─────────────┘                   └──────────────┘    │
+│                                           │             │
+│  ┌─────────────────────────────────────────┘            │
+│  │                                                      │
+│  ▼                                                      │
+│  ┌──────────────────┐   ┌──────────────────┐           │
+│  │   ChainClient    │   │  Challenge       │           │
+│  │   (HTTP adapter) │   │  System          │           │
+│  └────────┬─────────┘   └──────────────────┘           │
+└───────────┼─────────────────────────────────────────────┘
+            │
+            ▼
+   NatLangChain Node
+   (POST /entry, GET /pending, POST /contract/propose, ...)
+```
 
-### 1. Ingestion Phase
-- Polls NatLangChain for new pending intents
-- Validates intent structure and content
-- Filters out "unalignable" entries (vague, coercive, prohibited)
-- Maintains local cache of active intents (up to 10,000)
+### Core Components
 
-### 2. Mapping Phase
-- Generates semantic embeddings using LLM
-- Stores vectors in HNSW index for fast similarity search
-- Identifies high-probability pairwise alignments
-- Prioritizes by offered fees and similarity scores
+| Component | Purpose |
+|-----------|---------|
+| **MediatorNode** | Orchestrates the four-stage alignment cycle |
+| **IntentIngester** | Polls chain for pending intents, validates and caches them |
+| **VectorDatabase** | HNSW index for fast semantic similarity search |
+| **LLMProvider** | Anthropic/OpenAI integration for embeddings and negotiation |
+| **SettlementManager** | Creates settlements, submits to chain, monitors acceptance |
+| **ChainClient** | Single HTTP adapter for all NatLangChain API communication |
+| **ReputationTracker** | Tracks mediator reputation per MP-01 formula |
+| **ChallengeDetector** | Analyzes settlements for contradictions |
+| **ChallengeManager** | Submits and monitors challenges |
 
-### 3. Negotiation Phase (Internal Simulation)
-- Runs multi-turn LLM dialogue between intent pairs
-- Respects explicit constraints and desires
-- Generates reasoning trace and proposed terms
-- Produces confidence score for alignment
+## NatLangChain Compatibility
 
-### 4. Submission Phase
-- Formats settlement as prose + structured metadata
-- Includes model integrity hash for reproducibility
-- Adds stake/delegation references (DPoS mode)
-- Adds authority signature (PoA mode)
-- Publishes to chain with acceptance window
+The mediator communicates with NatLangChain through `ChainClient`, which uses these endpoints:
 
-## Consensus Modes
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Chain health check |
+| `/pending` | GET | Fetch pending unmined entries |
+| `/entry` | POST | Submit entries (intents, settlements, challenges) |
+| `/entries/search` | GET | Keyword search for entries |
+| `/entries/author/:author` | GET | Get entries by author |
+| `/search/semantic` | POST | Meaning-based search |
+| `/contract/list` | GET | List contracts by status |
+| `/contract/propose` | POST | Submit contract/settlement proposal |
+| `/contract/respond` | POST | Accept or reject a contract |
+| `/contract/payout` | POST | Claim facilitation fee payout |
+| `/contract/match` | POST | Find matching contracts (supplements local vector search) |
+| `/chain` | GET | Full blockchain data |
+| `/validate/chain` | GET | Chain integrity validation |
+| `/stats` | GET | Chain statistics |
+| `/reputation/:id` | GET | Load mediator reputation |
+| `/reputation` | POST | Update mediator reputation |
 
-### Permissionless Mode (Default)
-- No stake or authority required
-- Pure Proof-of-Alignment consensus
-- Reputation-based weighting
-- 72-hour acceptance window
-- Anyone can run a mediator
+All endpoints include circuit breaker protection and retry logic with exponential backoff.
 
-### DPoS Mode
-- Requires minimum effective stake
-- Supports delegation from token holders
-- Top N mediators rotate as active validators
-- Slashing for malicious behavior
-- Stake-weighted governance voting
+## Testing
 
-### PoA Mode
-- Restricted to pre-approved authorities
-- Fast 24-hour acceptance window
-- No stake requirements
-- Enterprise-friendly
-- Governed authority set
+```bash
+# Run all tests (13 suites, 408 tests)
+npm test
 
-### Hybrid Mode
-- Combines multiple mechanisms
-- Example: PoA authorities + DPoS rotation
-- Configurable per chain
+# Build
+npm run build
+
+# Lint
+npm run lint
+```
+
+## Project Structure
+
+```
+mediator-node/
+├── src/
+│   ├── MediatorNode.ts     # Main orchestrator (~500 lines)
+│   ├── chain/              # ChainClient + NatLangChain transformers
+│   ├── ingestion/          # Intent polling and validation
+│   ├── mapping/            # Vector database (HNSW similarity search)
+│   ├── llm/                # LLM provider (Anthropic/OpenAI)
+│   ├── settlement/         # Settlement creation and monitoring
+│   ├── reputation/         # Reputation tracking (MP-01)
+│   ├── challenge/          # Challenge detection and management
+│   ├── monitoring/         # Health server
+│   ├── config/             # Configuration loading
+│   ├── validation/         # Input validation (Zod schemas)
+│   ├── types/              # TypeScript type definitions
+│   └── utils/              # Crypto, logging, circuit breaker
+├── test/                   # Test suite (13 suites, 408 tests)
+├── demo/                   # Cross-project demo script
+├── examples/mock-chain/    # Mock NatLangChain server for development
+└── package.json
+```
 
 ## Reputation System
 
 Mediator reputation follows the MP-01 formula:
 
 ```
-Weight = (Successful_Closures + Failed_Challenges × 2) / (1 + Upheld_Challenges_Against + Forfeited_Fees)
+Weight = (Successful_Closures + Failed_Challenges * 2) / (1 + Upheld_Challenges_Against + Forfeited_Fees)
 ```
 
-**Metrics tracked:**
-- **Successful Closures**: Accepted settlements (increases weight)
-- **Failed Challenges**: Honest auditing (increases weight)
-- **Upheld Challenges Against**: Violations (decreases weight)
-- **Forfeited Fees**: Rejected settlements (decreases weight)
-
-Higher reputation weight improves:
-- Consensus selection priority
-- Challenge auditing authority
-- Mapping visibility
+Higher reputation improves consensus selection priority and challenge auditing authority.
 
 ## Fee Structure
 
 Facilitation fees are earned when:
 1. Both parties accept the proposed settlement
-2. No upheld challenges exist during acceptance window
+2. No upheld challenges exist during the acceptance window
 3. Settlement closes successfully
 
-**Fee distribution:**
-- **Permissionless**: 100% to mediator
-- **DPoS**: 80–90% to mediator, 10–20% distributed to delegators
-- **PoA**: Configurable per chain governance
-
-## Development
-
-### Project Structure
-
-```
-mediator-node/
-├── src/
-│   ├── types/              # TypeScript interfaces
-│   ├── config/             # Configuration loading
-│   ├── ingestion/          # Intent monitoring
-│   ├── mapping/            # Vector database & semantic search
-│   ├── llm/                # LLM provider integration
-│   ├── settlement/         # Settlement creation & MP-05 coordination
-│   ├── reputation/         # Reputation tracking
-│   ├── consensus/          # DPoS, PoA, semantic consensus, validator rotation
-│   ├── challenge/          # Challenge detection & management
-│   ├── dispute/            # MP-03 dispute system (clarification, evidence, escalation)
-│   ├── effort/             # MP-02 proof-of-effort (observers, receipts, anchoring)
-│   ├── burn/               # MP-06 behavioral pressure (burn economics, load scaling)
-│   ├── licensing/          # MP-04 licensing & delegation
-│   ├── governance/         # Stake-weighted governance voting
-│   ├── sybil/              # Sybil resistance (spam detection, submission tracking)
-│   ├── websocket/          # Real-time WebSocket server & events
-│   ├── monitoring/         # Health server & performance analytics
-│   ├── security/           # Automated vulnerability scanning & testing
-│   ├── network/            # Multi-chain orchestration
-│   ├── chain/              # NatLangChain API client
-│   ├── validation/         # Input validation schemas
-│   ├── utils/              # Crypto, logging, circuit breaker, timeouts
-│   ├── MediatorNode.ts     # Main orchestrator (1,350+ lines)
-│   ├── cli.ts              # CLI interface
-│   └── index.ts            # Library exports
-├── test/                   # Comprehensive test suite (52 test files)
-├── docs/                   # Protocol specs & guides (28 documentation files)
-├── benchmark/              # Performance benchmarking
-├── examples/mock-chain/    # Mock blockchain for testing
-├── spec.md                 # Protocol specification (MP-01)
-└── package.json
-```
-
-### Key Components
-
-**Core Mediation**
-- **MediatorNode**: Main orchestrator coordinating alignment cycles
-- **IntentIngester**: Polls chain, validates intents, maintains cache
-- **VectorDatabase**: HNSW index for semantic similarity search
-- **LLMProvider**: Anthropic/OpenAI integration for negotiation and embeddings
-- **SettlementManager**: Creates and monitors proposed settlements
-
-**Consensus & Governance**
-- **StakeManager**: DPoS stake and delegation handling
-- **AuthorityManager**: PoA authority set management
-- **ValidatorRotationManager**: DPoS slot-based validator rotation
-- **SemanticConsensusManager**: High-value settlement multi-mediator verification
-- **GovernanceManager**: Stake-weighted governance voting
-
-**Protocol Extensions**
-- **ReputationTracker**: Receipt-based reputation system (MP-01)
-- **EffortCaptureSystem**: Proof-of-effort tracking (MP-02)
-- **DisputeManager**: Dispute resolution and escalation (MP-03)
-- **LicensingManager**: License and delegation handling (MP-04)
-- **MP05SettlementCoordinator**: Settlement coordination (MP-05)
-- **BurnManager**: Token burn economics and load scaling (MP-06)
-
-**Infrastructure**
-- **WebSocketServer**: Real-time event streaming
-- **HealthServer**: HTTP health endpoints with Kubernetes probes
-- **ChainClient**: NatLangChain API abstraction layer
-- **ChallengeManager**: Settlement challenge handling
-- **SecurityTestRunner**: Automated vulnerability scanning
-
-## Testing
-
-```bash
-# Run all tests
-npm test
-
-# Run specific test file
-npm test -- unit/consensus/ValidatorRotationManager.test.ts
-
-# Run with coverage
-npm test -- --coverage
-
-# Run linting
-npm run lint
-
-# Run benchmarks
-npm run benchmark
-```
-
-Test coverage includes:
-- 26 unit test suites (consensus, security, challenge, sybil, etc.)
-- 9 integration test suites (settlement lifecycle, burn analytics, etc.)
-- End-to-end simulation tests
-- 52 total test files across all categories
-
-## Integration with Other Repositories
-
-This mediator node integrates with:
-- **NatLangChain Node** - Main blockchain/chain instances
-- **Reputation Chain** (optional) - Separate reputation tracking
-- **LLM Providers** - Anthropic Claude or OpenAI
-
-See [INTEGRATION.md](./INTEGRATION.md) for complete API documentation and multi-repo setup.
-
-### Required NatLangChain API Endpoints
-
-- `GET /api/v1/intents` - Fetch pending intents
-- `POST /api/v1/entries` - Submit settlement entries
-- `GET /api/v1/settlements/:id/status` - Check settlement status
-- `GET /api/v1/reputation/:mediatorId` - Load reputation
-- `POST /api/v1/reputation` - Update reputation
-- `GET /api/v1/delegations/:mediatorId` - Load delegations (DPoS)
-- `GET /api/v1/consensus/authorities` - Get PoA authority set
-
-### Testing Without a Real Chain
-
-Use the included **mock chain server** for development:
-
-```bash
-cd examples/mock-chain
-npm install
-npm start
-```
-
-The mock server provides all required endpoints and comes with example intents. See [examples/mock-chain/README.md](./examples/mock-chain/README.md) for details.
-
-## Security Considerations
-
-### Procedural Integrity
-The mediator **refuses to mediate** intents that are:
-- Coercive or manipulative
-- Intentionally vague or unclear
-- Violate the Lawful Use Guarantee
-
-After 5 flags, an intent is archived from mediation.
-
-### Stake Slashing
-In DPoS mode, stake is at risk for:
-- Submitting invalid settlements
-- Violating original intent constraints
-- Malicious behavior
-
-### Sybil Resistance
-- Daily posting limits (3 free intents per identity)
-- Excess deposits required for additional posts
-- Forfeiture on proven spam
-
-### Security Apps Integration
-
-Optional integration with external security applications for enhanced protection:
-
-**Boundary Daemon** - Policy enforcement layer:
-```bash
-# Enable in .env
-BOUNDARY_DAEMON_ENABLED=true
-BOUNDARY_DAEMON_URL=http://localhost:9000
-BOUNDARY_DAEMON_TOKEN=your-token
-```
-
-**Boundary SIEM** - Security event management:
-```bash
-# Enable in .env
-BOUNDARY_SIEM_ENABLED=true
-BOUNDARY_SIEM_URL=http://localhost:8080
-BOUNDARY_SIEM_TOKEN=your-token
-```
-
-See [Security Hardening Guide](./docs/SECURITY_HARDENING.md) for complete security configuration.
-
-## Governance
-
-### DPoS Governance
-Token holders can:
-- Delegate stake to mediators
-- Vote on parameter changes
-- Propose mode transitions
-- Add/remove PoA authorities
-
-**Voting power**: 1 token = 1 vote (stake-weighted)
-**Lifecycle**: 7-day voting → quorum → approval → 3-day delay → execution
-
-## Troubleshooting
-
-### Common Issues
-
-**"Minimum stake requirement not met"**
-- In DPoS mode, ensure `BONDED_STAKE_AMOUNT` ≥ `MIN_EFFECTIVE_STAKE`
-- Or attract delegators to increase effective stake
-
-**"Not authorized in PoA mode"**
-- Your public key must be in the authority set
-- Request authorization via governance proposal
-
-**"No LLM provider configured"**
-- Set `ANTHROPIC_API_KEY` or `OPENAI_API_KEY` in `.env`
-- Verify `LLM_PROVIDER` is set correctly
-
-**"Vector database initialization failed"**
-- Ensure `VECTOR_DB_PATH` directory is writable
-- Check disk space availability
-
-## Contributing
-
-We welcome contributions! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Submit a pull request
-
-See [LF1M.md](./LF1M.md) for team opportunities.
+The fee is calculated as a percentage (`FACILITATION_FEE_PERCENT`) of the total offered fees from both parties.
 
 ## License
 
-MIT License - see [LICENSE](./LICENSE)
-
-## Documentation
-
-### Core Documentation
-- [Protocol Specification](./spec.md) - MP-01 mediator protocol
-- [Architecture Guide](./ARCHITECTURE.md) - System design deep dive
-- [Integration Guide](./INTEGRATION.md) - API details and multi-chain setup
-- [API Reference](./docs/API.md) - Complete HTTP and WebSocket API
-- [Operations Runbook](./docs/OPERATIONS.md) - Production deployment guide
-- [Security Hardening](./docs/SECURITY_HARDENING.md) - Security audit and hardening
-
-### Protocol Extensions
-- [MP-02: Proof-of-Effort](./docs/MP-02-spec.md) - Temporal effort tracking
-- [MP-03: Disputes](./docs/MP-03-spec.md) - Dispute resolution and escalation
-- [MP-04: Licensing](./docs/MP-04-spec.md) - Licensing and delegation
-- [MP-05: Settlement](./docs/MP-05-spec.md) - Settlement coordination
-- [MP-06: Burn Economics](./docs/MP-06-spec.md) - Behavioral pressure controls
-
-### Governance & Community
-- [NCIP Specifications](./docs/NCIP-000.md) - Semantic governance (16 documents)
-- [Contributing Guide](./CONTRIBUTING.md) - How to contribute
-- [Code of Conduct](./CODE_OF_CONDUCT.md) - Community standards
-- [FAQ](./FAQ.md) - Common questions and answers
-
-## Support
-
-For issues, questions, or feedback:
-- GitHub Issues: https://github.com/kase1111-hash/mediator-node/issues
-- Email: kase1111@gmail.com
-
-## Connected Repositories
-
-The mediator-node is part of a larger ecosystem of tools for **natural language programming**, **intent preservation**, and **human-AI collaboration**.
-
-### NatLangChain Ecosystem
-
-| Repository | Description |
-|------------|-------------|
-| [NatLangChain](https://github.com/kase1111-hash/NatLangChain) | Prose-first, intent-native blockchain protocol for recording human intent in natural language |
-| [IntentLog](https://github.com/kase1111-hash/IntentLog) | Git for human reasoning - tracks "why" changes happen via prose commits |
-| [RRA-Module](https://github.com/kase1111-hash/RRA-Module) | Revenant Repo Agent - converts abandoned repositories into autonomous AI agents |
-| [ILR-module](https://github.com/kase1111-hash/ILR-module) | IP & Licensing Reconciliation - dispute resolution for intellectual property conflicts |
-| [Finite-Intent-Executor](https://github.com/kase1111-hash/Finite-Intent-Executor) | Posthumous execution of predefined intent via Solidity smart contracts |
-
-### Agent-OS Ecosystem
-
-| Repository | Description |
-|------------|-------------|
-| [Agent-OS](https://github.com/kase1111-hash/Agent-OS) | Natural-language native operating system for AI agents |
-| [synth-mind](https://github.com/kase1111-hash/synth-mind) | NLOS-based agent with psychological modules for emergent continuity and empathy |
-| [boundary-daemon-](https://github.com/kase1111-hash/boundary-daemon-) | Mandatory trust enforcement layer defining cognition boundaries |
-| [memory-vault](https://github.com/kase1111-hash/memory-vault) | Secure, offline-capable, owner-sovereign storage for cognitive artifacts |
-| [value-ledger](https://github.com/kase1111-hash/value-ledger) | Economic accounting layer for cognitive work (ideas, effort, novelty) |
-| [learning-contracts](https://github.com/kase1111-hash/learning-contracts) | Safety protocols for AI learning and data management |
-
-### Security Infrastructure
-
-| Repository | Description |
-|------------|-------------|
-| [Boundary-SIEM](https://github.com/kase1111-hash/Boundary-SIEM) | Security Information and Event Management for AI systems |
+MIT License — see [LICENSE](./LICENSE)
 
 ---
 
-**Built with the NatLangChain protocol**
+**Built for the NatLangChain protocol**
 *Intent over Form. Radical Neutrality. The Refusal of Shadow.*
 
 Post intent. Let the system find alignment.

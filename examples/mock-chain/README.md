@@ -1,6 +1,8 @@
 # Mock NatLangChain Server
 
-A simple mock HTTP server that implements the NatLangChain API for testing and development.
+A mock HTTP server that mimics the **NatLangChain post-refocus API surface** for testing and development.
+
+The endpoint contract is based on NatLangChain's actual API. See [NatLangChain's API_REFERENCE.md](https://github.com/kase1111-hash/NatLangChain/blob/main/API_REFERENCE.md) as the source of truth for the real API.
 
 ## Purpose
 
@@ -9,6 +11,7 @@ This mock server allows you to:
 - Develop and debug integration issues locally
 - Simulate the mediation cycle (matching, proposal, acceptance, payout)
 - Demo the four-stage alignment cycle
+- Run the cross-project demo (`npm run demo` from project root)
 
 ## Installation
 
@@ -187,4 +190,4 @@ This is a simple in-memory mock server for development. It does NOT:
 - Support P2P networking
 - Scale to production workloads
 
-For production, use a real NatLangChain node instance.
+For production, use a real [NatLangChain](https://github.com/kase1111-hash/NatLangChain) node instance.

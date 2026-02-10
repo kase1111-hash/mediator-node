@@ -178,8 +178,20 @@ export class MediatorNode {
    * Execute a single alignment cycle iteration
    */
   private async executeAlignmentCycle(): Promise<void> {
+    const cycleStart = Date.now();
+    let intentsProcessed = 0;
+    let candidatesFound = 0;
+    let negotiationsAttempted = 0;
+    let settlementsSubmitted = 0;
+
     try {
       logger.debug('Starting alignment cycle');
+
+      // Check chain availability before starting
+      if (!this.chainClient.isAvailable()) {
+        logger.warn('Chain unavailable (circuit breaker open), skipping cycle');
+        return;
+      }
 
       // Phase 1: Ingestion (already running in background via IntentIngester)
       const intents = this.ingester.getPrioritizedIntents();
@@ -189,44 +201,106 @@ export class MediatorNode {
         return;
       }
 
-      logger.info('Alignment cycle: Processing intents', { count: intents.length });
+      intentsProcessed = intents.length;
+      logger.info('Alignment cycle: Processing intents', { count: intents.length, ingestionMs: Date.now() - cycleStart });
 
       // Phase 2: Mapping - Generate embeddings and find candidates
+      const mappingStart = Date.now();
+      let embeddingsGenerated = 0;
+
       for (const intent of intents) {
         if (!this.embeddingCache.has(intent.hash)) {
-          const embedding = await this.llmProvider.generateEmbedding(intent.prose);
-          this.embeddingCache.set(intent.hash, embedding);
-          await this.vectorDb.addIntent(intent, embedding);
+          try {
+            const embedding = await this.llmProvider.generateEmbedding(intent.prose);
+            this.embeddingCache.set(intent.hash, embedding);
+            await this.vectorDb.addIntent(intent, embedding);
+            embeddingsGenerated++;
+          } catch (error) {
+            logger.warn('Failed to generate embedding, skipping intent', {
+              intentHash: intent.hash,
+              error: error instanceof Error ? error.message : 'Unknown',
+            });
+          }
         }
       }
 
-      // Find top alignment candidates
+      // Find top alignment candidates from local vector search
       const candidates = await this.vectorDb.findTopAlignmentCandidates(
         intents,
         this.embeddingCache,
         10
       );
 
-      logger.info('Found alignment candidates', { count: candidates.length });
+      // Merge chain-sourced match candidates (Option A: supplement local search)
+      try {
+        const representativeContent = intents.slice(0, 3).map(i => i.prose).join(' ');
+        const chainCandidates = await this.chainClient.getMatchCandidates(representativeContent, 10);
+
+        for (const chainCandidate of chainCandidates) {
+          const isDuplicate = candidates.some(
+            c =>
+              (c.intentA.hash === chainCandidate.intentA.hash && c.intentB.hash === chainCandidate.intentB.hash) ||
+              (c.intentA.hash === chainCandidate.intentB.hash && c.intentB.hash === chainCandidate.intentA.hash)
+          );
+          if (!isDuplicate) {
+            candidates.push(chainCandidate);
+          }
+        }
+
+        if (chainCandidates.length > 0) {
+          logger.info('Merged chain-sourced candidates', {
+            chainCandidates: chainCandidates.length,
+            totalCandidates: candidates.length,
+          });
+        }
+      } catch {
+        logger.debug('Chain match candidates unavailable, using local only');
+      }
+
+      candidatesFound = candidates.length;
+      const mappingMs = Date.now() - mappingStart;
+      logger.info('Found alignment candidates', { count: candidates.length, embeddingsGenerated, mappingMs });
 
       // Phase 3: Negotiation - Simulate alignment for top candidates
+      const negotiationStart = Date.now();
+
       for (const candidate of candidates.slice(0, 3)) {
-        await this.processAlignmentCandidate(candidate);
+        negotiationsAttempted++;
+        const submitted = await this.processAlignmentCandidate(candidate);
+        if (submitted) settlementsSubmitted++;
       }
+
+      logger.info('Negotiation phase completed', {
+        negotiationMs: Date.now() - negotiationStart,
+        negotiationsAttempted,
+        settlementsSubmitted,
+      });
 
       // Cleanup old embeddings
       this.cleanupEmbeddingCache();
-
-      logger.debug('Alignment cycle completed');
     } catch (error) {
-      logger.error('Error in alignment cycle', { error });
+      logger.error('Error in alignment cycle', {
+        error: error instanceof Error ? error.message : 'Unknown',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    } finally {
+      const durationMs = Date.now() - cycleStart;
+      if (intentsProcessed > 0) {
+        logger.info('Alignment cycle completed', {
+          durationMs,
+          intentsProcessed,
+          candidatesFound,
+          negotiationsAttempted,
+          settlementsSubmitted,
+        });
+      }
     }
   }
 
   /**
    * Process a single alignment candidate
    */
-  private async processAlignmentCandidate(candidate: AlignmentCandidate): Promise<void> {
+  private async processAlignmentCandidate(candidate: AlignmentCandidate): Promise<boolean> {
     try {
       logger.info('Processing alignment candidate', {
         intentA: candidate.intentA.hash,
@@ -246,7 +320,7 @@ export class MediatorNode {
           intentB: candidate.intentB.hash,
           reason: negotiationResult.reasoning,
         });
-        return;
+        return false;
       }
 
       // Phase 4: Submission
@@ -264,9 +338,17 @@ export class MediatorNode {
           intentA: candidate.intentA.hash,
           intentB: candidate.intentB.hash,
         });
+        return true;
       }
+
+      return false;
     } catch (error) {
-      logger.error('Error processing alignment candidate', { error });
+      logger.error('Error processing alignment candidate', {
+        error: error instanceof Error ? error.message : 'Unknown',
+        intentA: candidate.intentA.hash,
+        intentB: candidate.intentB.hash,
+      });
+      return false;
     }
   }
 
