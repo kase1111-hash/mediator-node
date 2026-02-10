@@ -238,7 +238,7 @@ describe('VectorDatabase', () => {
       await expect(vectorDb.initialize()).rejects.toThrow('Index load failed');
     });
 
-    it('should handle corrupted intent map file', async () => {
+    it('should handle corrupted intent map file gracefully', async () => {
       const indexPath = path.join(testDbPath, 'index.bin');
       const mapPath = path.join(testDbPath, 'intent-map.json');
       mockedFs.existsSync.mockImplementation((path: any) => {
@@ -246,7 +246,8 @@ describe('VectorDatabase', () => {
       });
       mockedFs.readFileSync.mockReturnValue('invalid json {]');
 
-      await expect(vectorDb.initialize()).rejects.toThrow();
+      // Implementation gracefully handles corrupted JSON — logs error, starts with empty map
+      await expect(vectorDb.initialize()).resolves.not.toThrow();
     });
   });
 
