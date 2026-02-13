@@ -6,7 +6,7 @@ Thank you for your interest in contributing to the NatLangChain Mediator Node! T
 
 1. **Read the documentation**: Familiarize yourself with the [Protocol Specification](spec.md) and the [Architecture Guide](ARCHITECTURE.md).
 2. **Understand the architecture**: Mediator Node is part of the NatLangChain 12-repository ecosystem. See the spec.md for the full repository map.
-3. **Set up your environment**: Follow the installation instructions in the [README](README.md) or [QUICKSTART](QUICKSTART.md).
+3. **Set up your environment**: Follow the installation instructions in the [README](README.md).
 
 ## How to Contribute
 
