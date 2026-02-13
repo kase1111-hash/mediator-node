@@ -11,278 +11,149 @@ The Mediator Node is designed to integrate with:
 
 ### Required API Endpoints
 
-The mediator node expects the following REST API endpoints on your NatLangChain node:
+The mediator node communicates with NatLangChain through `ChainClient` (`src/chain/ChainClient.ts`), which uses the following REST API endpoints. All endpoints use bare paths (no `/api/v1/` prefix).
 
-#### Intent Management
+#### Health & Status
 
-**GET /api/v1/intents**
-- Query parameters:
-  - `status` (string): Filter by status (pending, accepted, rejected, closed)
-  - `since` (number): Unix timestamp to fetch intents since
-  - `limit` (number): Maximum number of results
+**GET /health**
+- Health check for the chain node
+- Response: `200 OK` with status object
+
+**GET /stats**
+- Chain statistics
+- Response: `200 OK` with chain stats
+
+**GET /chain**
+- Full blockchain data
+- Response: `200 OK` with block data
+
+**GET /validate/chain**
+- Chain integrity validation
+- Response: `200 OK` with `{ valid: boolean, issues?: string[] }`
+
+#### Intent Discovery
+
+**GET /pending**
+- Fetch pending unmined entries (primary intent discovery endpoint)
 - Response:
 ```json
-{
-  "intents": [
-    {
+[
+  {
+    "content": "I am offering X in exchange for Y...",
+    "author": "user_pubkey_xyz",
+    "intent": "offer",
+    "timestamp": 1703001234567,
+    "metadata": {
       "hash": "0xabc123...",
-      "author": "user_pubkey_xyz",
-      "prose": "I am offering X in exchange for Y...",
-      "desires": ["collaboration", "payment"],
-      "constraints": ["must complete within 30 days"],
-      "offeredFee": 100,
-      "timestamp": 1703001234567,
-      "status": "pending",
-      "branch": "Professional/Engineering"
+      "is_contract": true,
+      "contract_type": "offer"
     }
-  ]
+  }
+]
+```
+
+**GET /entries/search?intent=\<keyword\>**
+- Keyword search for entries (fallback for intent discovery)
+- Query parameters:
+  - `intent` (string): Keyword to search for
+  - `status` (string): Filter by status
+- Response: Array of entries or `{ entries: [...] }`
+
+**GET /entries/author/:author**
+- Get entries by a specific author
+- Response: Array of entries or `{ entries: [...] }`
+
+**POST /search/semantic**
+- Meaning-based search across chain entries
+- Body:
+```json
+{
+  "query": "search text",
+  "top_k": 10,
+  "field": "both",
+  "min_score": 0.5
 }
 ```
+- Response: `{ results: [...] }`
 
 #### Entry Submission
 
-**POST /api/v1/entries**
+**POST /entry**
+- Submit any type of entry to the chain (intents, settlements, challenges, payouts)
 - Body:
 ```json
 {
-  "type": "settlement" | "accept" | "challenge" | "delegation" | "governance" | "payout",
-  "author": "mediator_pubkey",
   "content": "Prose representation of the entry",
+  "author": "mediator_pubkey",
+  "intent": "entry_type_description",
   "metadata": {
-    "... type-specific data ..."
+    "type": "settlement | challenge | payout_claim",
+    "...type-specific fields..."
   },
-  "signature": "cryptographic_signature"
+  "signature": "cryptographic_signature",
+  "validate": true,
+  "auto_mine": false
 }
 ```
-- Response: `201 Created` with entry hash
+- Response: `200 OK` or `201 Created`
 
-#### Settlement Status
+#### Contract/Settlement Operations
 
-**GET /api/v1/settlements/:settlementId/status**
-- Response:
+**GET /contract/list?status=open**
+- List contracts by status (used to find open settlement proposals)
+- Response: Array of contracts or `{ contracts: [...] }`
+
+**POST /contract/propose**
+- Submit a settlement/contract proposal
+- Body:
 ```json
 {
-  "id": "settlement_xyz",
-  "status": "proposed" | "accepted" | "rejected" | "closed",
-  "partyAAccepted": true,
-  "partyBAccepted": false,
-  "challenges": [
-    {
-      "id": "challenge_abc",
-      "challengerId": "challenger_pubkey",
-      "status": "pending" | "upheld" | "rejected"
-    }
-  ]
+  "offer_ref": "intent_hash_A",
+  "seek_ref": "intent_hash_B",
+  "mediator_id": "mediator_pubkey",
+  "terms": "Proposed settlement terms...",
+  "facilitation_fee": 1.5,
+  "acceptance_deadline": 1703260000000
 }
 ```
+- Response: `200 OK` or `201 Created`
+
+**POST /contract/respond**
+- Accept or reject a contract
+- Response: `200 OK`
+
+**POST /contract/payout**
+- Claim facilitation fee after settlement closure
+- Body:
+```json
+{
+  "settlement_ref": "settlement_id",
+  "mediator_id": "mediator_pubkey",
+  "fee_amount": 1.5
+}
+```
+- Response: `200 OK` or `201 Created`
+
+**POST /contract/match**
+- Find matching contracts (supplements local vector search)
+- Body:
+```json
+{
+  "content": "intent description",
+  "top_k": 5
+}
+```
+- Response: `{ matches: [...] }`
 
 #### Reputation
 
-**GET /api/v1/reputation/:mediatorId**
-- Response:
-```json
-{
-  "mediatorId": "mediator_pubkey",
-  "successfulClosures": 10,
-  "failedChallenges": 2,
-  "upheldChallengesAgainst": 0,
-  "forfeitedFees": 1,
-  "weight": 21.0,
-  "lastUpdated": 1703001234567
-}
-```
+**GET /reputation/:id**
+- Load mediator reputation
+- Response: Reputation object with `successfulClosures`, `failedChallenges`, `upheldChallengesAgainst`, `forfeitedFees`, `weight`
 
-**POST /api/v1/reputation**
-- Body: Same as GET response
+**POST /reputation**
+- Update mediator reputation
 - Response: `200 OK`
-
-#### Delegations (DPoS Mode)
-
-**GET /api/v1/delegations/:mediatorId**
-- Response:
-```json
-{
-  "delegations": [
-    {
-      "delegatorId": "user_pubkey",
-      "mediatorId": "mediator_pubkey",
-      "amount": 1000,
-      "timestamp": 1703001234567,
-      "status": "active",
-      "undelegationDeadline": null
-    }
-  ]
-}
-```
-
-#### Stake Management (DPoS Mode)
-
-**POST /api/v1/stake/bond**
-- Body:
-```json
-{
-  "mediatorId": "mediator_pubkey",
-  "amount": 1000,
-  "timestamp": 1703001234567
-}
-```
-- Response: `200 OK`
-
-**POST /api/v1/stake/unbond**
-- Body:
-```json
-{
-  "mediatorId": "mediator_pubkey",
-  "timestamp": 1703001234567
-}
-```
-- Response: `200 OK`
-
-#### Authority Set (PoA Mode)
-
-**GET /api/v1/consensus/authorities**
-- Response:
-```json
-{
-  "authorities": [
-    "authority_pubkey_1",
-    "authority_pubkey_2",
-    "authority_pubkey_3"
-  ]
-}
-```
-
-#### Governance
-
-**POST /api/v1/governance/proposals**
-- Body:
-```json
-{
-  "type": "parameter_change" | "authority_add" | "authority_remove" | "mode_transition",
-  "proposerId": "mediator_pubkey",
-  "title": "Proposal title",
-  "description": "Detailed description",
-  "parameters": {
-    "... proposal-specific parameters ..."
-  },
-  "timestamp": 1703001234567
-}
-```
-- Response: `201 Created` with proposal ID
-
-#### Challenge Management
-
-**POST /api/v1/challenges**
-- Body:
-```json
-{
-  "settlementId": "settlement_xyz",
-  "challengerId": "challenger_pubkey",
-  "reason": "Constraint violation",
-  "evidence": {
-    "type": "constraint_violation",
-    "details": "..."
-  },
-  "timestamp": 1703001234567
-}
-```
-- Response: `201 Created` with challenge ID
-
-**GET /api/v1/challenges/:challengeId**
-- Response:
-```json
-{
-  "id": "challenge_abc",
-  "settlementId": "settlement_xyz",
-  "challengerId": "challenger_pubkey",
-  "status": "pending" | "upheld" | "rejected",
-  "timestamp": 1703001234567
-}
-```
-
-#### Burn Transactions (MP-06)
-
-**POST /api/v1/burn**
-- Body:
-```json
-{
-  "type": "intent_filing" | "success_burn",
-  "author": "user_pubkey",
-  "amount": 50,
-  "intentHash": "intent_hash",
-  "multiplier": 1.5,
-  "timestamp": 1703001234567
-}
-```
-- Response: `200 OK` with transaction ID
-
-**GET /api/v1/burn/stats/:userId**
-- Response:
-```json
-{
-  "userId": "user_pubkey",
-  "dailySubmissions": 3,
-  "totalBurned": 150,
-  "freeRemaining": 0
-}
-```
-
-#### Dispute Management (MP-03)
-
-**POST /api/v1/disputes**
-- Body:
-```json
-{
-  "settlementId": "settlement_xyz",
-  "initiatorId": "user_pubkey",
-  "reason": "Settlement terms not honored",
-  "evidence": [],
-  "timestamp": 1703001234567
-}
-```
-- Response: `201 Created` with dispute ID
-
-**GET /api/v1/disputes/:disputeId**
-- Response:
-```json
-{
-  "id": "dispute_abc",
-  "settlementId": "settlement_xyz",
-  "status": "initiated" | "clarifying" | "under_review" | "escalated" | "resolved" | "dismissed",
-  "initiatorId": "user_pubkey",
-  "evidence": [],
-  "clarifications": [],
-  "outcome": null
-}
-```
-
-#### Receipt Management (MP-02)
-
-**POST /api/v1/receipts**
-- Body:
-```json
-{
-  "type": "effort_receipt",
-  "author": "user_pubkey",
-  "segments": [],
-  "hash": "receipt_hash",
-  "signature": "signature",
-  "timestamp": 1703001234567
-}
-```
-- Response: `201 Created` with receipt ID
-
-**GET /api/v1/receipts/:receiptId**
-- Response:
-```json
-{
-  "id": "receipt_abc",
-  "author": "user_pubkey",
-  "status": "created" | "validated" | "anchored",
-  "segments": [],
-  "anchorHash": "blockchain_anchor"
-}
-```
 
 ## WebSocket Integration
 
@@ -330,7 +201,7 @@ ws.onmessage = (event) => {
 | Burn (MP-06) | `burn.executed`, `burn.escalated`, `burn.load_scaled` |
 | System | `system.node_status_changed`, `system.health_update` |
 
-See [docs/API.md](./docs/API.md) for complete WebSocket documentation.
+See [_deferred/docs/API.md](./_deferred/docs/API.md) for complete WebSocket documentation.
 
 ## Multi-Chain Setup
 
@@ -376,10 +247,10 @@ This starts a mock NatLangChain API on `http://localhost:8545` with example data
 
 ### Integration Tests
 
-Run integration tests against a mock or local chain:
+Run all tests (including integration tests) against a mock or local chain:
 
 ```bash
-npm run test:integration
+npm test
 ```
 
 ## Related Repositories
@@ -446,21 +317,7 @@ interface ProposedSettlement {
 
 ### Chain Authentication
 
-If your NatLangChain node requires authentication:
-
-1. Add authentication headers in the mediator code:
-
-```typescript
-// In src/ingestion/IntentIngester.ts
-const response = await axios.get(`${this.config.chainEndpoint}/api/v1/intents`, {
-  headers: {
-    'Authorization': `Bearer ${process.env.CHAIN_API_TOKEN}`,
-  },
-  params: { ... }
-});
-```
-
-2. Add `CHAIN_API_TOKEN` to your `.env` file
+If your NatLangChain node requires authentication, you would need to extend the `ChainClient` class (`src/chain/ChainClient.ts`) to include authentication headers in requests. The `ChainClient` uses axios with a configurable base URL, so authentication can be added via request interceptors or by modifying the axios instance configuration.
 
 ### LLM Authentication
 
@@ -472,82 +329,34 @@ API keys for Anthropic/OpenAI are already configured via:
 
 ### Docker Deployment
 
-```dockerfile
-FROM node:18-alpine
+The project includes a `Dockerfile` and `docker-compose.yml` for containerized deployment:
 
-WORKDIR /app
+```bash
+# Build and start with Docker Compose (includes mock chain)
+docker-compose up
 
-COPY package*.json ./
-RUN npm ci --production
+# Or build separately
+docker-compose build
+docker-compose up -d
 
-COPY dist/ ./dist/
-COPY .env.example ./.env
-
-CMD ["node", "dist/cli.js", "start"]
+# View logs
+docker-compose logs -f mediator-node
 ```
 
-### Docker Compose with Chain
-
-```yaml
-version: '3.8'
-
-services:
-  natlangchain-node:
-    image: natlangchain/node:latest
-    ports:
-      - "8545:8545"
-    environment:
-      - CHAIN_ID=natlang-1
-      - CONSENSUS_MODE=permissionless
-
-  mediator-node:
-    build: .
-    depends_on:
-      - natlangchain-node
-    environment:
-      - CHAIN_ENDPOINT=http://natlangchain-node:8545
-      - CHAIN_ID=natlang-1
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
-```
+The `docker-compose.yml` defines services for the mock chain and one or more mediator nodes, with configurable environment variables passed through from the host.
 
 ## Monitoring Integration
 
 ### Health Checks
 
-Add health check endpoint:
+The mediator node includes a built-in health server (`src/monitoring/HealthServer.ts`) that provides HTTP health endpoints. Configure it via the `HEALTH_SERVER_PORT` environment variable (default: 9090).
 
-```typescript
-// In src/cli.ts, add a health check server
-import express from 'express';
+**Available endpoints:**
+- `GET /health` — Full health report with component status
+- `GET /health/live` — Kubernetes liveness probe
+- `GET /health/ready` — Kubernetes readiness probe
 
-const healthServer = express();
-healthServer.get('/health', (req, res) => {
-  const status = node.getStatus();
-  res.json({
-    status: status.isRunning ? 'healthy' : 'unhealthy',
-    ...status
-  });
-});
-healthServer.listen(9090);
-```
-
-### Prometheus Metrics
-
-Export metrics for monitoring:
-
-```typescript
-import { Counter, Gauge, register } from 'prom-client';
-
-const settlementsProposed = new Counter({
-  name: 'mediator_settlements_proposed_total',
-  help: 'Total number of settlements proposed'
-});
-
-const reputationWeight = new Gauge({
-  name: 'mediator_reputation_weight',
-  help: 'Current reputation weight'
-});
-```
+The health server monitors vector database status, chain client connectivity, LLM provider availability, and memory/CPU usage.
 
 ## Troubleshooting Integration Issues
 
@@ -582,7 +391,7 @@ sequenceDiagram
 
     User->>Chain: POST intent A
     User->>Chain: POST intent B
-    Chain->>Mediator: Poll: GET /api/v1/intents
+    Chain->>Mediator: Poll: GET /pending
     Mediator->>LLM: Generate embeddings
     Mediator->>Mediator: Find alignment match
     Mediator->>LLM: Negotiate terms

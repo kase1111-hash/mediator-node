@@ -420,15 +420,15 @@ SettlementManager.monitorSettlements()
 ### Tunable Parameters
 
 **Performance Tuning**:
-- Polling interval: 10 seconds (hardcoded)
-- Cycle interval: 30 seconds (hardcoded)
-- Monitor interval: 60 seconds (hardcoded)
+- Polling interval: 10 seconds default (`INTENT_POLLING_INTERVAL_MS`)
+- Cycle interval: 30 seconds default (`ALIGNMENT_CYCLE_INTERVAL_MS`)
+- Monitor interval: 60 seconds default (`SETTLEMENT_MONITORING_INTERVAL_MS`)
 - Top candidates per cycle: 3 (hardcoded)
 
 **Quality Tuning**:
 - Similarity threshold: 0.5 (hardcoded in VectorDatabase)
-- Confidence threshold: 60 (hardcoded in LLMProvider)
-- Max flag count: 5 (hardcoded in IntentIngester)
+- Confidence threshold: 60 default (`MIN_NEGOTIATION_CONFIDENCE`)
+- Max flag count: 5 default (`MAX_INTENT_FLAGS`)
 
 ## Security
 

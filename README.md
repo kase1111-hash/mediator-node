@@ -81,7 +81,7 @@ Key environment variables:
 | `MEDIATOR_PRIVATE_KEY` | Yes | — | Mediator identity private key |
 | `MEDIATOR_PUBLIC_KEY` | Yes | — | Mediator identity public key |
 | `FACILITATION_FEE_PERCENT` | No | `1.0` | Fee percentage earned on successful settlements |
-| `EMBEDDING_PROVIDER` | No | `fallback` | `openai`, `voyage`, `cohere`, or `fallback` |
+| `EMBEDDING_PROVIDER` | No | — | `openai`, `voyage`, `cohere`, or `fallback` (falls back to naive character-based if unset) |
 | `EMBEDDING_API_KEY` | No | — | API key for embedding provider |
 | `ALIGNMENT_CYCLE_INTERVAL_MS` | No | `30000` | Alignment cycle interval in milliseconds |
 | `MIN_NEGOTIATION_CONFIDENCE` | No | `60` | Minimum LLM confidence score (0-100) |
