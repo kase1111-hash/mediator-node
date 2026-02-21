@@ -4,7 +4,9 @@ import axios from 'axios';
 import { MediatorConfig, Intent, NegotiationResult } from '../types';
 import { logger } from '../utils/logger';
 import { generateModelIntegrityHash } from '../utils/crypto';
-import { sanitizeIntentForLLM, buildStructuredPrompt } from '../utils/prompt-security';
+import { sanitizeIntentForLLM, buildStructuredPrompt, sanitizeForPrompt } from '../utils/prompt-security';
+import { assertNoSecrets } from '../utils/secret-scanner';
+import { ProposedTermsSchema } from '../validation/schemas';
 
 /**
  * LLMProvider handles interactions with language models for
@@ -35,6 +37,11 @@ export class LLMProvider {
   private openai?: OpenAI;
   private embeddingOpenAI?: OpenAI;
   private fallbackWarningShown: boolean = false;
+  // LLM spending cap: track API call counts per window
+  private hourlyCallCount: number = 0;
+  private dailyCallCount: number = 0;
+  private hourlyWindowStart: number = Date.now();
+  private dailyWindowStart: number = Date.now();
 
   constructor(config: MediatorConfig) {
     this.config = config;
@@ -51,6 +58,49 @@ export class LLMProvider {
         apiKey: config.llmApiKey,
       });
     }
+  }
+
+  /**
+   * Check and enforce LLM API call rate limits (spending cap).
+   * Throws if the hourly or daily limit is exceeded.
+   */
+  private enforceRateLimit(): void {
+    const now = Date.now();
+    const maxPerHour = (this.config as any).llmMaxCallsPerHour ?? 100;
+    const maxPerDay = (this.config as any).llmMaxCallsPerDay ?? 500;
+
+    // Reset hourly window
+    if (now - this.hourlyWindowStart > 3600000) {
+      this.hourlyCallCount = 0;
+      this.hourlyWindowStart = now;
+    }
+
+    // Reset daily window
+    if (now - this.dailyWindowStart > 86400000) {
+      this.dailyCallCount = 0;
+      this.dailyWindowStart = now;
+    }
+
+    if (this.hourlyCallCount >= maxPerHour) {
+      logger.error('LLM hourly rate limit exceeded', {
+        count: this.hourlyCallCount,
+        limit: maxPerHour,
+        security: true,
+      });
+      throw new Error(`LLM rate limit exceeded: ${this.hourlyCallCount}/${maxPerHour} calls per hour`);
+    }
+
+    if (this.dailyCallCount >= maxPerDay) {
+      logger.error('LLM daily rate limit exceeded', {
+        count: this.dailyCallCount,
+        limit: maxPerDay,
+        security: true,
+      });
+      throw new Error(`LLM rate limit exceeded: ${this.dailyCallCount}/${maxPerDay} calls per day`);
+    }
+
+    this.hourlyCallCount++;
+    this.dailyCallCount++;
   }
 
   /**
@@ -245,6 +295,12 @@ export class LLMProvider {
   ): Promise<NegotiationResult> {
     const promptTemplate = this.buildNegotiationPrompt(intentA, intentB);
 
+    // Scan prompt for accidentally included secrets before sending to LLM
+    assertNoSecrets(promptTemplate, 'LLM negotiation prompt', [this.config.llmApiKey, this.config.mediatorPrivateKey]);
+
+    // Enforce LLM spending cap
+    this.enforceRateLimit();
+
     try {
       let response: string;
       let modelUsed: string;
@@ -417,7 +473,18 @@ Provide your analysis now:`,
 
       if (termsMatch) {
         try {
-          proposedTerms = JSON.parse(termsMatch[1]);
+          const rawTerms = JSON.parse(termsMatch[1]);
+          // Validate parsed LLM output against Zod schema (passthrough preserves extra fields)
+          const validated = ProposedTermsSchema.passthrough().safeParse(rawTerms);
+          if (validated.success) {
+            proposedTerms = validated.data;
+          } else {
+            logger.warn('LLM proposed terms failed schema validation', {
+              errors: validated.error.errors.map(e => `${e.path.join('.')}: ${e.message}`),
+            });
+            // Fall back to raw parsed terms if validation fails on extra fields
+            proposedTerms = rawTerms;
+          }
         } catch (e) {
           logger.warn('Failed to parse proposed terms JSON', { error: e });
         }
@@ -451,13 +518,20 @@ Provide your analysis now:`,
    * Generate a semantic summary for verification
    */
   public async generateSemanticSummary(settlement: any): Promise<string> {
+    const sanitizedTerms = sanitizeForPrompt(JSON.stringify(settlement.proposedTerms ?? {}));
     const prompt = `Generate a concise semantic summary of this settlement:
 
 Intent A Hash: ${settlement.intentHashA}
 Intent B Hash: ${settlement.intentHashB}
-Terms: ${JSON.stringify(settlement.proposedTerms)}
+Terms: ${sanitizedTerms}
 
 Provide a 2-3 sentence summary of the essential agreement in plain language.`;
+
+    // Scan for secrets before sending to LLM
+    assertNoSecrets(prompt, 'LLM semantic summary prompt', [this.config.llmApiKey, this.config.mediatorPrivateKey]);
+
+    // Enforce LLM spending cap
+    this.enforceRateLimit();
 
     try {
       if (this.config.llmProvider === 'anthropic' && this.anthropic) {
@@ -495,6 +569,12 @@ Provide a 2-3 sentence summary of the essential agreement in plain language.`;
     temperature?: number;
   }): Promise<string> {
     const { prompt, maxTokens = 2048, temperature = 0.7 } = params;
+
+    // Scan for secrets before sending to LLM
+    assertNoSecrets(prompt, 'LLM generateText prompt', [this.config.llmApiKey, this.config.mediatorPrivateKey]);
+
+    // Enforce LLM spending cap
+    this.enforceRateLimit();
 
     try {
       if (this.config.llmProvider === 'anthropic' && this.anthropic) {

@@ -93,3 +93,25 @@ jobs:
 
       - name: Run tests with coverage
         run: npm test -- --coverage
+
+  security:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for dependency vulnerabilities
+        run: npm audit --audit-level=high
+
+      - name: Verify lockfile integrity
+        run: npm ci --ignore-scripts --dry-run

@@ -13,10 +13,12 @@ export function generateModelIntegrityHash(
 }
 
 /**
- * Generate a unique hash for an intent
+ * Generate a unique hash for an intent.
+ * Includes a random nonce to prevent hash collision attacks from predictable inputs.
  */
 export function generateIntentHash(prose: string, author: string, timestamp: number): string {
-  const data = `${prose}:${author}:${timestamp}`;
+  const nonce = crypto.randomBytes(16).toString('hex');
+  const data = `${prose}:${author}:${timestamp}:${nonce}`;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
@@ -25,6 +27,12 @@ export function generateIntentHash(prose: string, author: string, timestamp: num
  *
  * SECURITY NOTE: This uses proper asymmetric cryptography.
  * Private keys should be in PEM format.
+ *
+ * DEVELOPMENT MODE (non-PEM keys): Falls back to symmetric HMAC-SHA256.
+ * In this mode, both generateSignature and verifySignature use the SAME
+ * shared secret. The "publicKey" parameter in verifySignature must be
+ * identical to the "privateKey" used in generateSignature. This is NOT
+ * true asymmetric cryptography — it's a convenience for development/testing.
  *
  * @param data - Data to sign
  * @param privateKey - Private key in PEM format (RSA, EC, or Ed25519)

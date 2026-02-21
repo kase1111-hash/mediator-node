@@ -6,6 +6,7 @@ import {
 } from '../types';
 import { LLMProvider } from '../llm/LLMProvider';
 import { logger } from '../utils/logger';
+import { sanitizeForPrompt } from '../utils/prompt-security';
 
 /**
  * ChallengeDetector analyzes proposed settlements for semantic contradictions
@@ -67,20 +68,29 @@ export class ChallengeDetector {
     intentA: Intent,
     intentB: Intent
   ): string {
+    // Sanitize all user-controlled inputs before including in LLM prompt
+    const safeProseA = sanitizeForPrompt(intentA.prose);
+    const safeProseB = sanitizeForPrompt(intentB.prose);
+    const safeDesiresA = intentA.desires.map(d => sanitizeForPrompt(d)).join(', ');
+    const safeDesiresB = intentB.desires.map(d => sanitizeForPrompt(d)).join(', ');
+    const safeConstraintsA = intentA.constraints.map(c => sanitizeForPrompt(c)).join(', ');
+    const safeConstraintsB = intentB.constraints.map(c => sanitizeForPrompt(c)).join(', ');
+    const safeReasoning = sanitizeForPrompt(settlement.reasoningTrace);
+
     return `You are a semantic analyzer for a mediation protocol. Your task is to identify if a proposed settlement violates any explicit constraints from the original intents.
 
 **Intent A (from ${intentA.author}):**
-Prose: ${intentA.prose}
-Desires: ${intentA.desires.join(', ')}
-Constraints: ${intentA.constraints.join(', ')}
+Prose: ${safeProseA}
+Desires: ${safeDesiresA}
+Constraints: ${safeConstraintsA}
 
 **Intent B (from ${intentB.author}):**
-Prose: ${intentB.prose}
-Desires: ${intentB.desires.join(', ')}
-Constraints: ${intentB.constraints.join(', ')}
+Prose: ${safeProseB}
+Desires: ${safeDesiresB}
+Constraints: ${safeConstraintsB}
 
 **Proposed Settlement:**
-Reasoning: ${settlement.reasoningTrace}
+Reasoning: ${safeReasoning}
 Terms:
 ${JSON.stringify(settlement.proposedTerms, null, 2)}
 

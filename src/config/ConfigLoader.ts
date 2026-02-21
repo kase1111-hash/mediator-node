@@ -219,5 +219,56 @@ export class ConfigLoader {
     if (config.vectorDimensions <= 0) {
       throw new Error('Vector dimensions must be positive');
     }
+
+    // Production-only guards
+    if (process.env.NODE_ENV === 'production') {
+      // Reject known placeholder/demo keys in production
+      const placeholderValues = [
+        'your-api-key-here',
+        'your-private-key-here',
+        'your-public-key-here',
+        'your-openai-key-here',
+        'your-authority-key-here',
+        'demo_private_key_for_testing_only',
+        'test-api-key',
+        'test-key',
+      ];
+
+      const configValues = [
+        config.llmApiKey,
+        config.mediatorPrivateKey,
+        config.mediatorPublicKey,
+        config.poaAuthorityKey,
+      ].filter(Boolean) as string[];
+
+      for (const value of configValues) {
+        if (placeholderValues.includes(value)) {
+          throw new Error(
+            `Production environment detected placeholder key value: "${value}". ` +
+            'Replace with real credentials before deploying to production.'
+          );
+        }
+      }
+
+      // Enforce HTTPS for chain endpoints in production (except localhost)
+      const endpoints = [config.chainEndpoint, config.reputationChainEndpoint].filter(Boolean) as string[];
+      for (const endpoint of endpoints) {
+        try {
+          const url = new URL(endpoint);
+          const isLocalhost = url.hostname === 'localhost' || url.hostname === '127.0.0.1';
+          if (url.protocol === 'http:' && !isLocalhost) {
+            throw new Error(
+              `Production environment requires HTTPS for chain endpoints. ` +
+              `"${endpoint}" uses plain HTTP. Use HTTPS or target localhost for development.`
+            );
+          }
+        } catch (e) {
+          if (e instanceof Error && e.message.includes('Production environment')) {
+            throw e;
+          }
+          // URL parse errors are handled elsewhere
+        }
+      }
+    }
   }
 }

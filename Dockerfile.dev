@@ -5,6 +5,9 @@ RUN apk add --no-cache python3 make g++
 
 WORKDIR /app
 
+# Create non-root user for security
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
 # Copy package files
 COPY package*.json ./
 COPY tsconfig.json ./
@@ -12,8 +15,12 @@ COPY tsconfig.json ./
 # Install all dependencies (including dev)
 RUN npm install
 
-# Create directories
-RUN mkdir -p /app/data/vector-db /app/logs
+# Create directories with correct ownership
+RUN mkdir -p /app/data/vector-db /app/logs && \
+    chown -R appuser:appgroup /app
+
+# Switch to non-root user
+USER appuser
 
 EXPOSE 9090
 

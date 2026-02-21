@@ -1,7 +1,8 @@
 import { Intent, IntentStatus, MediatorConfig } from '../types';
 import { logger } from '../utils/logger';
-import { generateIntentHash } from '../utils/crypto';
+import { generateIntentHash, verifySignature } from '../utils/crypto';
 import { ChainClient } from '../chain';
+import { detectPromptInjection, injectionRateLimiter } from '../utils/prompt-security';
 
 /**
  * IntentIngester monitors the NatLangChain for new intents
@@ -13,6 +14,10 @@ export class IntentIngester {
   private lastPollTime: number = 0;
   private pollingInterval: NodeJS.Timeout | null = null;
   private chainClient: ChainClient;
+  // Anomaly detection: track author submission frequency
+  private authorFrequency: Map<string, number[]> = new Map();
+  // Duplicate detection: track recent prose hashes
+  private recentProseHashes: Map<string, number> = new Map();
 
   constructor(config: MediatorConfig, chainClient?: ChainClient) {
     this.config = config;
@@ -103,6 +108,69 @@ export class IntentIngester {
     if (!this.isValidIntent(intent)) {
       logger.warn('Invalid intent detected', { hash: intent.hash });
       return;
+    }
+
+    // Verify signature if present (permissive: unsigned intents are accepted)
+    if (intent.signature) {
+      const signatureValid = verifySignature(intent.prose, intent.signature, intent.author);
+      if (!signatureValid) {
+        logger.warn('Intent signature verification failed — skipping', {
+          hash: intent.hash,
+          author: intent.author,
+          security: true,
+        });
+        return;
+      }
+    }
+
+    // Check for prompt injection attempts
+    if (detectPromptInjection(intent.prose)) {
+      injectionRateLimiter.recordAttempt(intent.author);
+      logger.warn('Prompt injection detected in intent prose', {
+        hash: intent.hash,
+        author: intent.author,
+        security: true,
+      });
+
+      // If author is rate-limited, reject the intent entirely
+      if (injectionRateLimiter.isLimited(intent.author)) {
+        logger.warn('Author rate-limited due to repeated injection attempts — rejecting intent', {
+          hash: intent.hash,
+          author: intent.author,
+          security: true,
+        });
+        return;
+      }
+      // Otherwise, continue processing (sanitization in LLMProvider will handle it)
+    }
+
+    // Anomaly detection: check author submission frequency
+    const maxIntentsPerAuthorPerHour = (this.config as any).maxIntentsPerAuthorPerHour ?? 20;
+    const now = Date.now();
+    const oneHourAgo = now - 3600000;
+    const authorTimestamps = this.authorFrequency.get(intent.author) || [];
+    const recentTimestamps = authorTimestamps.filter(t => t > oneHourAgo);
+    if (recentTimestamps.length >= maxIntentsPerAuthorPerHour) {
+      logger.warn('Author exceeds intent submission rate limit', {
+        hash: intent.hash,
+        author: intent.author,
+        count: recentTimestamps.length,
+        security: true,
+      });
+      return;
+    }
+    recentTimestamps.push(now);
+    this.authorFrequency.set(intent.author, recentTimestamps);
+
+    // Duplicate detection: skip if same prose hash recently seen
+    if (this.recentProseHashes.has(intent.hash)) {
+      logger.debug('Duplicate intent prose hash detected — skipping', { hash: intent.hash });
+      return;
+    }
+    this.recentProseHashes.set(intent.hash, now);
+    // Cleanup old prose hash entries (older than 1 hour)
+    for (const [hash, ts] of this.recentProseHashes.entries()) {
+      if (ts < oneHourAgo) this.recentProseHashes.delete(hash);
     }
 
     // Check for "Unalignable" flags
