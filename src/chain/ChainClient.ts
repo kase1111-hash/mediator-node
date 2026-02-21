@@ -33,6 +33,7 @@ import {
   burnToEntry,
   contractToSettlement,
 } from './transformers';
+import { scanForSecrets, redactSecrets } from '../utils/secret-scanner';
 
 export interface ChainClientConfig {
   chainEndpoint: string;
@@ -417,6 +418,19 @@ export class ChainClient {
     settlement: ProposedSettlement
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      // Scan settlement data for secrets before chain submission
+      const dataToScan = `${settlement.reasoningTrace} ${JSON.stringify(settlement.proposedTerms)}`;
+      const settlementScan = scanForSecrets(dataToScan);
+      if (settlementScan.found) {
+        logger.warn('Secrets detected in settlement data — blocking submission', {
+          settlementId: settlement.id,
+          matchCount: settlementScan.matches.length,
+          matchLabels: settlementScan.matches.map(m => m.label),
+          security: true,
+        });
+        return { success: false, error: 'Settlement contains potential secrets — submission blocked' };
+      }
+
       // First, try the /contract/propose endpoint
       try {
         const proposal = settlementToContractProposal(settlement);
@@ -621,6 +635,18 @@ export class ChainClient {
     challenge: Challenge
   ): Promise<{ success: boolean; challengeId?: string; error?: string }> {
     try {
+      // Scan challenge data for secrets
+      const challengeData = `${challenge.contradictionProof} ${challenge.paraphraseEvidence}`;
+      const challengeScan = scanForSecrets(challengeData);
+      if (challengeScan.found) {
+        logger.warn('Secrets detected in challenge data — blocking submission', {
+          challengeId: challenge.id,
+          matchCount: challengeScan.matches.length,
+          security: true,
+        });
+        return { success: false, error: 'Challenge contains potential secrets — submission blocked' };
+      }
+
       const entry = challengeToEntry(challenge, this.config.mediatorPublicKey);
       const signature = generateSignature(entry.content, this.config.mediatorPrivateKey);
 
@@ -735,6 +761,17 @@ export class ChainClient {
     options?: SubmitEntryOptions
   ): Promise<{ success: boolean; error?: string }> {
     try {
+      // Scan outbound content for secrets before chain submission
+      const contentScan = scanForSecrets(content);
+      if (contentScan.found) {
+        logger.warn('Secrets detected in chain submission content — redacting', {
+          matchCount: contentScan.matches.length,
+          matchLabels: contentScan.matches.map(m => m.label),
+          security: true,
+        });
+        content = redactSecrets(content);
+      }
+
       const signature =
         options?.signature ||
         generateSignature(content, this.config.mediatorPrivateKey);

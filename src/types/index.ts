@@ -133,6 +133,12 @@ export interface Intent {
    * Used in sybil resistance and spam detection.
    */
   flagCount?: number;
+
+  /**
+   * Optional cryptographic signature for verifying intent authenticity.
+   * When present, signature is verified against the author's public key.
+   */
+  signature?: string;
 }
 
 /**

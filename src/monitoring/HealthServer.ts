@@ -3,6 +3,10 @@
  *
  * Exposes health check endpoints for monitoring and orchestration.
  * Designed for use with Kubernetes, Docker health checks, and load balancers.
+ *
+ * Security: Binds to 127.0.0.1 by default (localhost only).
+ * Set HEALTH_SERVER_HOST to '0.0.0.0' to expose externally (not recommended).
+ * CORS is restricted to a configurable allowlist via HEALTH_CORS_ORIGINS.
  */
 
 import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
@@ -11,6 +15,7 @@ import { logger } from '../utils/logger';
 export interface HealthServerConfig {
   port: number;
   host?: string;
+  corsOrigins?: string[];
 }
 
 export interface HealthStatusProvider {
@@ -33,12 +38,21 @@ export class HealthServer {
   private config: Required<HealthServerConfig>;
   private statusProvider: HealthStatusProvider | null = null;
   private startTime: number = Date.now();
+  private corsOrigins: Set<string>;
 
   constructor(config: HealthServerConfig) {
+    // Default to localhost binding for security
+    const corsOriginsEnv = process.env.HEALTH_CORS_ORIGINS;
+    const corsOrigins = config.corsOrigins
+      || (corsOriginsEnv ? corsOriginsEnv.split(',').map(o => o.trim()) : []);
+
     this.config = {
-      host: config.host || '0.0.0.0',
+      host: config.host || process.env.HEALTH_SERVER_HOST || '127.0.0.1',
+      corsOrigins,
       ...config,
     };
+
+    this.corsOrigins = new Set(corsOrigins);
 
     this.server = createServer((req, res) => this.handleRequest(req, res));
   }
@@ -89,9 +103,8 @@ export class HealthServer {
   private async handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
     const url = req.url || '/';
 
-    // Set CORS headers
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    // Set CORS headers — restricted to allowlist
+    this.setCorsHeaders(req, res);
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204);
@@ -102,6 +115,14 @@ export class HealthServer {
     if (req.method !== 'GET') {
       res.writeHead(405, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Method not allowed' }));
+      return;
+    }
+
+    // Reject requests with bodies (health endpoints don't accept bodies)
+    const contentLength = parseInt(req.headers['content-length'] || '0', 10);
+    if (contentLength > 1024) {
+      res.writeHead(413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Request body too large' }));
       return;
     }
 
@@ -127,6 +148,26 @@ export class HealthServer {
       });
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Internal server error' }));
+    }
+  }
+
+  /**
+   * Set CORS headers based on allowlist.
+   * If no origins are configured, no CORS header is set (same-origin only).
+   */
+  private setCorsHeaders(req: IncomingMessage, res: ServerResponse): void {
+    const origin = req.headers.origin;
+
+    if (this.corsOrigins.size === 0) {
+      // No CORS configured — same-origin only
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      return;
+    }
+
+    if (origin && this.corsOrigins.has(origin)) {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+      res.setHeader('Vary', 'Origin');
     }
   }
 
