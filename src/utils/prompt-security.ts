@@ -272,8 +272,9 @@ export class InjectionRateLimiter {
     this.maxAttempts = maxAttempts;
     this.windowMs = windowMs;
 
-    // Clean up old entries every hour
-    setInterval(() => this.cleanup(), 3600000);
+    // Clean up old entries every hour. unref() so this housekeeping timer
+    // never keeps the process alive on its own (module-level singleton).
+    setInterval(() => this.cleanup(), 3600000).unref();
   }
 
   /**

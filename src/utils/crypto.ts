@@ -13,12 +13,16 @@ export function generateModelIntegrityHash(
 }
 
 /**
- * Generate a unique hash for an intent.
- * Includes a random nonce to prevent hash collision attacks from predictable inputs.
+ * Generate the identifying hash for an intent.
+ *
+ * Must be deterministic: chain entries without a metadata hash are re-hashed on
+ * every read (each poll, each restart, each mediator node), and the result is used
+ * as the intent's identity in the cache, the persisted vector index and settlements.
+ * A random nonce here would give the same entry a new identity on every read.
+ * SHA-256 collision resistance does not depend on the input being unpredictable.
  */
 export function generateIntentHash(prose: string, author: string, timestamp: number): string {
-  const nonce = crypto.randomBytes(16).toString('hex');
-  const data = `${prose}:${author}:${timestamp}:${nonce}`;
+  const data = `${prose}:${author}:${timestamp}`;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 

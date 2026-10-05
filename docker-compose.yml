@@ -58,7 +58,9 @@ services:
       - LOG_LEVEL=info
     volumes:
       - mediator-data:/app/data
-      - ./logs:/app/logs
+      # Named volume (not a ./logs bind mount): the image runs as non-root appuser,
+      # which cannot write to a root- or host-user-owned bind-mounted directory
+      - mediator-logs:/app/logs
     networks:
       - natlangchain
     restart: unless-stopped
@@ -86,7 +88,7 @@ services:
       - LOG_LEVEL=info
     volumes:
       - mediator-data-2:/app/data
-      - ./logs:/app/logs
+      - mediator-logs-2:/app/logs
     networks:
       - natlangchain
     restart: unless-stopped
@@ -100,3 +102,5 @@ networks:
 volumes:
   mediator-data:
   mediator-data-2:
+  mediator-logs:
+  mediator-logs-2:

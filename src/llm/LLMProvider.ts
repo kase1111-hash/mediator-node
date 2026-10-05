@@ -66,8 +66,8 @@ export class LLMProvider {
    */
   private enforceRateLimit(): void {
     const now = Date.now();
-    const maxPerHour = (this.config as any).llmMaxCallsPerHour ?? 100;
-    const maxPerDay = (this.config as any).llmMaxCallsPerDay ?? 500;
+    const maxPerHour = this.config.llmMaxCallsPerHour ?? 100;
+    const maxPerDay = this.config.llmMaxCallsPerDay ?? 500;
 
     // Reset hourly window
     if (now - this.hourlyWindowStart > 3600000) {

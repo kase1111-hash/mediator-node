@@ -15,6 +15,7 @@ import { MediatorConfig, Intent, ConsensusMode } from '../../../src/types';
 import {
   VALID_INTENT_1,
   VALID_INTENT_2,
+  VALID_INTENT_3,
   VAGUE_INTENT,
   COERCIVE_INTENT,
   UNSAFE_INTENT,
@@ -363,7 +364,7 @@ describe('IntentIngester', () => {
 
       const oldIntent = { ...VALID_INTENT_1, timestamp: Date.now() - 10000 };
       const newIntent1 = { ...VALID_INTENT_2, timestamp: Date.now() - 5000 };
-      const newIntent2 = { ...{ ...VALID_INTENT_1, hash: 'intent_new' }, timestamp: Date.now() };
+      const newIntent2 = { ...VALID_INTENT_3, hash: 'intent_new', timestamp: Date.now() };
 
       mockGetPendingIntents.mockResolvedValueOnce([oldIntent, newIntent1, newIntent2]);
 

@@ -76,6 +76,11 @@ export class ConfigLoader {
       // Health server
       healthServerPort: this.getOptionalNumber('HEALTH_SERVER_PORT'),
 
+      // Security limits
+      llmMaxCallsPerHour: this.getOptionalNumber('LLM_MAX_CALLS_PER_HOUR'),
+      llmMaxCallsPerDay: this.getOptionalNumber('LLM_MAX_CALLS_PER_DAY'),
+      maxIntentsPerAuthorPerHour: this.getOptionalNumber('MAX_INTENTS_PER_AUTHOR_PER_HOUR'),
+
       // Logging
       logLevel: this.getLogLevel(),
     };
@@ -218,6 +223,18 @@ export class ConfigLoader {
     // Validate vector dimensions
     if (config.vectorDimensions <= 0) {
       throw new Error('Vector dimensions must be positive');
+    }
+
+    // A non-numeric or non-positive limit would silently disable the cap
+    const securityLimits: Array<[string, number | undefined]> = [
+      ['LLM_MAX_CALLS_PER_HOUR', config.llmMaxCallsPerHour],
+      ['LLM_MAX_CALLS_PER_DAY', config.llmMaxCallsPerDay],
+      ['MAX_INTENTS_PER_AUTHOR_PER_HOUR', config.maxIntentsPerAuthorPerHour],
+    ];
+    for (const [name, value] of securityLimits) {
+      if (value !== undefined && !(value > 0)) {
+        throw new Error(`${name} must be a positive number`);
+      }
     }
 
     // Production-only guards

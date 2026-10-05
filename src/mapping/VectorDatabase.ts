@@ -163,6 +163,8 @@ export class VectorDatabase {
     topK: number = 20
   ): Promise<AlignmentCandidate[]> {
     const candidates: AlignmentCandidate[] = [];
+    // Unordered pair keys already emitted, so (A,B) and (B,A) are not both negotiated
+    const seenPairs = new Set<string>();
 
     for (const intent of intents) {
       const embedding = embeddings.get(intent.hash);
@@ -171,6 +173,13 @@ export class VectorDatabase {
       const similar = await this.findSimilarIntents(embedding, 5, intent.hash);
 
       for (const candidate of similar) {
+        // A settlement needs two distinct parties: never pair an author with themselves
+        if (candidate.intentB.author === intent.author) continue;
+
+        const pairKey = [intent.hash, candidate.intentB.hash].sort().join(':');
+        if (seenPairs.has(pairKey)) continue;
+        seenPairs.add(pairKey);
+
         candidates.push({
           intentA: intent,
           intentB: candidate.intentB,

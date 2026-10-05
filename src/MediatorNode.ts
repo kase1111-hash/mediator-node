@@ -32,6 +32,7 @@ export class MediatorNode {
 
   private isRunning: boolean = false;
   private cycleInterval: NodeJS.Timeout | null = null;
+  private monitoringIntervals: NodeJS.Timeout[] = [];
   private embeddingCache: Map<string, number[]> = new Map();
 
   constructor(config: MediatorConfig) {
@@ -118,6 +119,11 @@ export class MediatorNode {
       clearInterval(this.cycleInterval);
       this.cycleInterval = null;
     }
+
+    for (const interval of this.monitoringIntervals) {
+      clearInterval(interval);
+    }
+    this.monitoringIntervals = [];
 
     this.ingester.stopPolling();
 
@@ -359,7 +365,7 @@ export class MediatorNode {
     const settlementMonitoringInterval = this.config.settlementMonitoringIntervalMs || 60000;
     logger.info('Starting settlement monitoring', { intervalMs: settlementMonitoringInterval });
 
-    setInterval(async () => {
+    this.monitoringIntervals.push(setInterval(async () => {
       if (!this.isRunning) return;
 
       try {
@@ -370,14 +376,14 @@ export class MediatorNode {
           stack: error instanceof Error ? error.stack : undefined,
         });
       }
-    }, settlementMonitoringInterval);
+    }, settlementMonitoringInterval));
   }
 
   /**
    * Start challenge monitoring
    */
   private startChallengeMonitoring(): void {
-    setInterval(async () => {
+    this.monitoringIntervals.push(setInterval(async () => {
       if (!this.isRunning) return;
 
       try {
@@ -388,10 +394,10 @@ export class MediatorNode {
           stack: error instanceof Error ? error.stack : undefined,
         });
       }
-    }, 60000);
+    }, 60000));
 
     const checkInterval = this.config.challengeCheckInterval || 60000;
-    setInterval(async () => {
+    this.monitoringIntervals.push(setInterval(async () => {
       if (!this.isRunning) return;
 
       try {
@@ -402,7 +408,7 @@ export class MediatorNode {
           stack: error instanceof Error ? error.stack : undefined,
         });
       }
-    }, checkInterval);
+    }, checkInterval));
   }
 
   /**
