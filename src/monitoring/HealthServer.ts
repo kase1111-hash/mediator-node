@@ -46,10 +46,11 @@ export class HealthServer {
     const corsOrigins = config.corsOrigins
       || (corsOriginsEnv ? corsOriginsEnv.split(',').map(o => o.trim()) : []);
 
+    // Spread first so an explicit `host: undefined` cannot override the localhost default
     this.config = {
+      ...config,
       host: config.host || process.env.HEALTH_SERVER_HOST || '127.0.0.1',
       corsOrigins,
-      ...config,
     };
 
     this.corsOrigins = new Set(corsOrigins);

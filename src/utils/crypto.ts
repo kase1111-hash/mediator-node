@@ -39,7 +39,7 @@ export function generateIntentHash(prose: string, author: string, timestamp: num
  * true asymmetric cryptography — it's a convenience for development/testing.
  *
  * @param data - Data to sign
- * @param privateKey - Private key in PEM format (RSA, EC, or Ed25519)
+ * @param privateKey - Private key in PEM format (RSA or EC; Ed25519 is not supported by createSign)
  * @returns Base64-encoded signature
  */
 export function generateSignature(data: string, privateKey: string): string {
@@ -76,7 +76,7 @@ export function generateSignature(data: string, privateKey: string): string {
  *
  * @param data - Original data that was signed
  * @param signature - Base64-encoded signature
- * @param publicKey - Public key in PEM format (RSA, EC, or Ed25519)
+ * @param publicKey - Public key in PEM format (RSA or EC; Ed25519 is not supported by createVerify)
  * @returns true if signature is valid
  */
 export function verifySignature(data: string, signature: string, publicKey: string): boolean {
