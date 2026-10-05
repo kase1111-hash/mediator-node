@@ -51,7 +51,11 @@ const INJECTION_PATTERNS = [
  * @returns true if injection patterns detected
  */
 export function detectPromptInjection(text: string): boolean {
-  return INJECTION_PATTERNS.some((pattern) => pattern.test(text));
+  return INJECTION_PATTERNS.some((pattern) => {
+    // Patterns are /g (shared with replace), which makes test() stateful via lastIndex
+    pattern.lastIndex = 0;
+    return pattern.test(text);
+  });
 }
 
 /**
@@ -272,8 +276,9 @@ export class InjectionRateLimiter {
     this.maxAttempts = maxAttempts;
     this.windowMs = windowMs;
 
-    // Clean up old entries every hour
-    setInterval(() => this.cleanup(), 3600000);
+    // Clean up old entries every hour. unref() so this housekeeping timer
+    // never keeps the process alive on its own (module-level singleton).
+    setInterval(() => this.cleanup(), 3600000).unref();
   }
 
   /**

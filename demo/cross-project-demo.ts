@@ -23,6 +23,7 @@
  *   CHAIN_ENDPOINT=http://localhost:8545 npx ts-node demo/cross-project-demo.ts
  */
 
+import fs from 'fs';
 import axios from 'axios';
 import { ChainClient } from '../src/chain';
 import { IntentIngester } from '../src/ingestion/IntentIngester';
@@ -230,24 +231,19 @@ async function main(): Promise<void> {
     }
   }
 
-  // Compute pairwise similarity
-  const candidates: Array<{ intentA: any; intentB: any; similarity: number }> = [];
-  const intentList = intents.filter(i => embeddingCache.has(i.hash));
+  // Find candidates with the same VectorDatabase pairing the mediator node uses
+  // (excludes same-author pairs and mirrored duplicates). Start from a fresh index.
+  fs.rmSync(config.vectorDbPath!, { recursive: true, force: true });
+  const vectorDb = new VectorDatabase(config);
+  await vectorDb.initialize();
 
-  for (let i = 0; i < intentList.length; i++) {
-    for (let j = i + 1; j < intentList.length; j++) {
-      const a = embeddingCache.get(intentList[i].hash)!;
-      const b = embeddingCache.get(intentList[j].hash)!;
-      const dot = a.reduce((sum, v, k) => sum + v * b[k], 0);
-      candidates.push({
-        intentA: intentList[i],
-        intentB: intentList[j],
-        similarity: dot,
-      });
-    }
+  const intentList = intents.filter(i => embeddingCache.has(i.hash));
+  for (const intent of intentList) {
+    await vectorDb.addIntent(intent, embeddingCache.get(intent.hash)!);
   }
 
-  candidates.sort((a, b) => b.similarity - a.similarity);
+  const candidates = (await vectorDb.findTopAlignmentCandidates(intentList, embeddingCache, 10))
+    .map(c => ({ intentA: c.intentA, intentB: c.intentB, similarity: c.similarityScore }));
 
   detail('Candidates found', candidates.length);
   for (const c of candidates) {

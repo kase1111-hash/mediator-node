@@ -416,5 +416,6 @@ export function validatePathWithinDirectory(filePath: string, baseDir: string): 
   const resolvedPath = path.resolve(filePath);
   const resolvedBase = path.resolve(baseDir);
 
-  return resolvedPath.startsWith(resolvedBase);
+  // Compare on a separator boundary so '/data/store-evil' is not inside '/data/store'
+  return resolvedPath === resolvedBase || resolvedPath.startsWith(resolvedBase + path.sep);
 }

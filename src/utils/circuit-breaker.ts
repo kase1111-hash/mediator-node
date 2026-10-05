@@ -236,7 +236,8 @@ export class CircuitBreaker {
    * Check if circuit is allowing requests
    */
   isAvailable(): boolean {
-    return this.state === 'closed' || (this.state === 'open' && this.shouldAttemptReset());
+    // Mirrors canExecute(): half_open allows trial requests
+    return this.state !== 'open' || this.shouldAttemptReset();
   }
 
   /**

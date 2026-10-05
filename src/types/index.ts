@@ -803,6 +803,11 @@ export interface MediatorConfig {
   // Health server
   healthServerPort?: number;
 
+  // Security limits
+  llmMaxCallsPerHour?: number;
+  llmMaxCallsPerDay?: number;
+  maxIntentsPerAuthorPerHour?: number;
+
   // Logging
   logLevel: 'debug' | 'info' | 'warn' | 'error';
 }

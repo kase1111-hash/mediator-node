@@ -13,12 +13,16 @@ export function generateModelIntegrityHash(
 }
 
 /**
- * Generate a unique hash for an intent.
- * Includes a random nonce to prevent hash collision attacks from predictable inputs.
+ * Generate the identifying hash for an intent.
+ *
+ * Must be deterministic: chain entries without a metadata hash are re-hashed on
+ * every read (each poll, each restart, each mediator node), and the result is used
+ * as the intent's identity in the cache, the persisted vector index and settlements.
+ * A random nonce here would give the same entry a new identity on every read.
+ * SHA-256 collision resistance does not depend on the input being unpredictable.
  */
 export function generateIntentHash(prose: string, author: string, timestamp: number): string {
-  const nonce = crypto.randomBytes(16).toString('hex');
-  const data = `${prose}:${author}:${timestamp}:${nonce}`;
+  const data = `${prose}:${author}:${timestamp}`;
   return crypto.createHash('sha256').update(data).digest('hex');
 }
 
@@ -35,7 +39,7 @@ export function generateIntentHash(prose: string, author: string, timestamp: num
  * true asymmetric cryptography — it's a convenience for development/testing.
  *
  * @param data - Data to sign
- * @param privateKey - Private key in PEM format (RSA, EC, or Ed25519)
+ * @param privateKey - Private key in PEM format (RSA or EC; Ed25519 is not supported by createSign)
  * @returns Base64-encoded signature
  */
 export function generateSignature(data: string, privateKey: string): string {
@@ -72,7 +76,7 @@ export function generateSignature(data: string, privateKey: string): string {
  *
  * @param data - Original data that was signed
  * @param signature - Base64-encoded signature
- * @param publicKey - Public key in PEM format (RSA, EC, or Ed25519)
+ * @param publicKey - Public key in PEM format (RSA or EC; Ed25519 is not supported by createVerify)
  * @returns true if signature is valid
  */
 export function verifySignature(data: string, signature: string, publicKey: string): boolean {

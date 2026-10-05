@@ -1,8 +1,10 @@
+import { createHash } from 'crypto';
 import { Intent, IntentStatus, MediatorConfig } from '../types';
 import { logger } from '../utils/logger';
 import { generateIntentHash, verifySignature } from '../utils/crypto';
 import { ChainClient } from '../chain';
 import { detectPromptInjection, injectionRateLimiter } from '../utils/prompt-security';
+import { scanForSecrets } from '../utils/secret-scanner';
 
 /**
  * IntentIngester monitors the NatLangChain for new intents
@@ -145,7 +147,7 @@ export class IntentIngester {
     }
 
     // Anomaly detection: check author submission frequency
-    const maxIntentsPerAuthorPerHour = (this.config as any).maxIntentsPerAuthorPerHour ?? 20;
+    const maxIntentsPerAuthorPerHour = this.config.maxIntentsPerAuthorPerHour ?? 20;
     const now = Date.now();
     const oneHourAgo = now - 3600000;
     const authorTimestamps = this.authorFrequency.get(intent.author) || [];
@@ -162,15 +164,22 @@ export class IntentIngester {
     recentTimestamps.push(now);
     this.authorFrequency.set(intent.author, recentTimestamps);
 
-    // Duplicate detection: skip if same prose hash recently seen
-    if (this.recentProseHashes.has(intent.hash)) {
-      logger.debug('Duplicate intent prose hash detected — skipping', { hash: intent.hash });
+    // Duplicate detection: skip if the same author recently submitted the same prose.
+    // Keyed on content, not intent.hash: a re-posted intent is a new chain entry with its own hash.
+    const proseHash = this.proseFingerprint(intent);
+    const seenAt = this.recentProseHashes.get(proseHash);
+    if (seenAt !== undefined && seenAt > oneHourAgo) {
+      logger.warn('Duplicate intent prose from same author — skipping', {
+        hash: intent.hash,
+        author: intent.author,
+        security: true,
+      });
       return;
     }
-    this.recentProseHashes.set(intent.hash, now);
+    this.recentProseHashes.set(proseHash, now);
     // Cleanup old prose hash entries (older than 1 hour)
     for (const [hash, ts] of this.recentProseHashes.entries()) {
-      if (ts < oneHourAgo) this.recentProseHashes.delete(hash);
+      if (ts <= oneHourAgo) this.recentProseHashes.delete(hash);
     }
 
     // Check for "Unalignable" flags
@@ -188,6 +197,21 @@ export class IntentIngester {
       intent.constraints = this.extractConstraints(intent.prose);
     }
 
+    // The outbound secret scan blocks every negotiation prompt containing this intent,
+    // so caching it would only let it occupy the top negotiation slots every cycle.
+    // Scan the fields that go into the prompt with the same config literals LLMProvider uses.
+    const promptFields = [intent.author, intent.branch ?? '', intent.prose, ...intent.desires, ...intent.constraints].join('\n');
+    const secretScan = scanForSecrets(promptFields, [this.config.llmApiKey, this.config.mediatorPrivateKey]);
+    if (secretScan.found) {
+      logger.warn('Intent contains secrets or PII that cannot be sent to the LLM — skipping', {
+        hash: intent.hash,
+        author: intent.author,
+        matchLabels: secretScan.matches.map(m => m.label),
+        security: true,
+      });
+      return;
+    }
+
     // Cache the intent
     this.intentCache.set(intent.hash, intent);
 
@@ -200,6 +224,14 @@ export class IntentIngester {
 
     // Enforce max cache size
     this.enforceMaxCacheSize();
+  }
+
+  /**
+   * Content fingerprint for duplicate detection: author + whitespace/case-normalized prose
+   */
+  private proseFingerprint(intent: Intent): string {
+    const normalizedProse = intent.prose.trim().replace(/\s+/g, ' ').toLowerCase();
+    return createHash('sha256').update(`${intent.author}\n${normalizedProse}`).digest('hex');
   }
 
   /**

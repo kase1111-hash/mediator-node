@@ -123,7 +123,11 @@ export class SettlementManager {
         // Check if acceptance deadline has passed
         if (settlement.acceptanceDeadline < now) {
           if (settlement.partyAAccepted && settlement.partyBAccepted) {
-            await this.closeSettlement(settlement);
+            if (!(await this.closeSettlement(settlement))) {
+              // Keep tracking so the payout is retried on the next pass
+              logger.error('Failed to close settlement, will retry', { settlementId: id });
+              continue;
+            }
           } else {
             settlement.status = 'rejected';
             logger.info('Settlement expired', { id });
@@ -152,16 +156,12 @@ export class SettlementManager {
 
         // Check if both accepted
         if (settlement.partyAAccepted && settlement.partyBAccepted) {
-          try {
-            await this.closeSettlement(settlement);
+          if (await this.closeSettlement(settlement)) {
             // Only delete from tracking after successful closure
             this.activeSettlements.delete(id);
-          } catch (closeError) {
+          } else {
             // Keep settlement in tracking if closure fails to allow retry
-            logger.error('Failed to close settlement, will retry', {
-              error: closeError,
-              settlementId: id,
-            });
+            logger.error('Failed to close settlement, will retry', { settlementId: id });
           }
         }
       } catch (error) {
@@ -173,8 +173,11 @@ export class SettlementManager {
   /**
    * Close a settlement and claim fee
    * Uses ChainClient for NatLangChain API compatibility
+   *
+   * @returns true when the settlement is finished (fee claimed or forfeited),
+   *          false when the payout failed and should be retried
    */
-  private async closeSettlement(settlement: ProposedSettlement): Promise<void> {
+  private async closeSettlement(settlement: ProposedSettlement): Promise<boolean> {
     try {
       logger.info('Closing settlement', { id: settlement.id });
 
@@ -187,7 +190,7 @@ export class SettlementManager {
           challenges: upheldChallenges.length,
         });
         settlement.status = 'rejected';
-        return;
+        return true;
       }
 
       // Use ChainClient to submit payout
@@ -202,14 +205,17 @@ export class SettlementManager {
           id: settlement.id,
           fee: settlement.facilitationFee,
         });
-      } else {
-        logger.error('Failed to submit payout', {
-          settlementId: settlement.id,
-          error: payoutResult.error,
-        });
+        return true;
       }
+
+      logger.error('Failed to submit payout', {
+        settlementId: settlement.id,
+        error: payoutResult.error,
+      });
+      return false;
     } catch (error) {
       logger.error('Error closing settlement', { error, settlementId: settlement.id });
+      return false;
     }
   }
 

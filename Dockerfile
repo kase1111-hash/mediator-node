@@ -42,6 +42,9 @@ RUN mkdir -p /app/data/vector-db /app/logs && \
 # Switch to non-root user
 USER appuser
 
+# Start the health server (loopback-only by default) so HEALTHCHECK has something to probe
+ENV HEALTH_SERVER_PORT=9090
+
 # Expose health check port
 EXPOSE 9090
 

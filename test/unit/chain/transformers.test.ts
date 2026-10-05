@@ -78,6 +78,17 @@ describe('NatLangChain Transformers', () => {
       expect(intent.hash.length).toBeGreaterThan(0);
     });
 
+    it('should generate the same hash each time the same entry is read', () => {
+      const entry: NatLangChainEntry = {
+        content: 'This is a test entry with no metadata hash.',
+        author: 'testuser',
+        intent: 'test',
+        timestamp: 1700000000000,
+      };
+
+      expect(entryToIntent(entry).hash).toBe(entryToIntent({ ...entry }).hash);
+    });
+
     it('should map validation_status to IntentStatus', () => {
       const testCases = [
         { status: 'valid', expected: 'pending' },
