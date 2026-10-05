@@ -51,7 +51,11 @@ const INJECTION_PATTERNS = [
  * @returns true if injection patterns detected
  */
 export function detectPromptInjection(text: string): boolean {
-  return INJECTION_PATTERNS.some((pattern) => pattern.test(text));
+  return INJECTION_PATTERNS.some((pattern) => {
+    // Patterns are /g (shared with replace), which makes test() stateful via lastIndex
+    pattern.lastIndex = 0;
+    return pattern.test(text);
+  });
 }
 
 /**

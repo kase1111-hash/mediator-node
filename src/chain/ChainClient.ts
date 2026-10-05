@@ -210,16 +210,28 @@ export class ChainClient {
         }
       }
 
-      // Filter by contract type (offers and seeks)
-      const contractEntries = entries.filter(
-        entry =>
-          entry.metadata?.is_contract ||
-          entry.metadata?.contract_type === 'offer' ||
-          entry.metadata?.contract_type === 'seek'
-      );
+      // Filter by contract type (offers and seeks). Proposals, responses and closures
+      // are also is_contract entries, but they are not intents to be matched.
+      const contractEntries = entries.filter(entry => {
+        const contractType = entry.metadata?.contract_type;
+        return contractType === 'offer' ||
+          contractType === 'seek' ||
+          (!!entry.metadata?.is_contract && !contractType);
+      });
 
-      // Transform to Intent objects
-      const intents = contractEntries.map(entry => entryToIntent(entry));
+      // Transform to Intent objects, skipping malformed entries so one bad entry
+      // does not drop every valid intent in the batch
+      const intents: Intent[] = [];
+      for (const entry of contractEntries) {
+        try {
+          intents.push(entryToIntent(entry));
+        } catch (error) {
+          logger.warn('Skipping chain entry that could not be converted to an intent', {
+            author: typeof entry.author === 'string' ? entry.author.substring(0, 50) : undefined,
+            error: error instanceof Error ? error.message : 'Unknown',
+          });
+        }
+      }
 
       // Apply filters
       let filteredIntents = intents;

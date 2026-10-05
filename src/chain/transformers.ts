@@ -103,7 +103,8 @@ export function entryToIntent(entry: NatLangChainEntry): Intent {
   }
 
   const timestamp = entry.timestamp || Date.now();
-  const hash = entry.metadata?.hash || generateIntentHash(entry.content, entry.author, timestamp);
+  // Hash only stable entry fields: Date.now() here would re-identify the entry on every read
+  const hash = entry.metadata?.hash || generateIntentHash(entry.content, entry.author, entry.timestamp || 0);
 
   // Extract desires from intent field or metadata
   const desires = entry.metadata?.desires || extractDesiresFromContent(entry.content, entry.intent);

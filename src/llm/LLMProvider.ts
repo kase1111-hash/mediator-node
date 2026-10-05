@@ -9,6 +9,39 @@ import { assertNoSecrets } from '../utils/secret-scanner';
 import { ProposedTermsSchema } from '../validation/schemas';
 
 /**
+ * Extract the balanced JSON object that follows `marker` (after optional whitespace).
+ * A lazy regex stops at the first '}', which truncates nested objects such as additionalTerms.
+ */
+function extractJsonObjectAfter(text: string, marker: string): string | null {
+  const markerIndex = text.indexOf(marker);
+  if (markerIndex === -1) return null;
+
+  let start = markerIndex + marker.length;
+  while (start < text.length && /\s/.test(text[start])) start++;
+  if (text[start] !== '{') return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      depth++;
+    } else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/**
  * LLMProvider handles interactions with language models for
  * negotiation, embedding generation, and semantic analysis.
  *
@@ -190,7 +223,7 @@ export class LLMProvider {
       }
 
       if (embeddingProvider === 'cohere') {
-        return this.generateCohereEmbedding(text);
+        return await this.generateCohereEmbedding(text);
       }
 
       // Fallback: character-based embedding (DEVELOPMENT ONLY)
@@ -463,17 +496,18 @@ Provide your analysis now:`,
       const successMatch = response.match(/SUCCESS:\s*(yes|no)/i);
       const confidenceMatch = response.match(/CONFIDENCE:\s*(\d+)/);
       const reasoningMatch = response.match(/REASONING:\s*(.+?)(?=PROPOSED_TERMS:|$)/s);
-      const termsMatch = response.match(/PROPOSED_TERMS:\s*({[\s\S]+?})/);
+      const termsJson = extractJsonObjectAfter(response, 'PROPOSED_TERMS:');
 
       const success = successMatch ? successMatch[1].toLowerCase() === 'yes' : false;
       const confidence = confidenceMatch ? parseInt(confidenceMatch[1]) : 0;
-      const reasoning = reasoningMatch ? reasoningMatch[1].trim() : 'No reasoning provided';
+      let reasoning = reasoningMatch ? reasoningMatch[1].trim() : 'No reasoning provided';
 
       let proposedTerms: any = {};
+      let termsInvalid = false;
 
-      if (termsMatch) {
+      if (termsJson) {
         try {
-          const rawTerms = JSON.parse(termsMatch[1]);
+          const rawTerms = JSON.parse(termsJson);
           // Validate parsed LLM output against Zod schema (passthrough preserves extra fields)
           const validated = ProposedTermsSchema.passthrough().safeParse(rawTerms);
           if (validated.success) {
@@ -482,8 +516,9 @@ Provide your analysis now:`,
             logger.warn('LLM proposed terms failed schema validation', {
               errors: validated.error.errors.map(e => `${e.path.join('.')}: ${e.message}`),
             });
-            // Fall back to raw parsed terms if validation fails on extra fields
-            proposedTerms = rawTerms;
+            // Never propose a settlement on terms that fail validation (e.g. a negative price)
+            termsInvalid = true;
+            reasoning = `${reasoning} [Proposed terms rejected: failed schema validation]`;
           }
         } catch (e) {
           logger.warn('Failed to parse proposed terms JSON', { error: e });
@@ -494,7 +529,7 @@ Provide your analysis now:`,
       const minConfidence = this.config.minNegotiationConfidence ?? 60;
 
       return {
-        success: success && confidence >= minConfidence,
+        success: success && !termsInvalid && confidence >= minConfidence,
         reasoning,
         proposedTerms,
         confidenceScore: confidence,

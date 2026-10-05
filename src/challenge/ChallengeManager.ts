@@ -20,6 +20,8 @@ export class ChallengeManager {
   private config: MediatorConfig;
   private reputationTracker: ReputationTracker | null = null;
   private submittedChallenges: Map<string, ChallengeHistory> = new Map();
+  // Outcomes of resolved challenges that were removed from active tracking
+  private resolvedOutcomes: { upheld: number; rejected: number } = { upheld: 0, rejected: 0 };
   private chainClient: ChainClient;
 
   constructor(config: MediatorConfig, reputationTracker?: ReputationTracker, chainClient?: ChainClient) {
@@ -153,6 +155,11 @@ export class ChallengeManager {
 
     for (const [challengeId, history] of this.submittedChallenges.entries()) {
       try {
+        // Resolved challenges stay tracked for stats but are no longer polled
+        if (history.status !== 'pending') {
+          continue;
+        }
+
         // Check if we should poll for updates (don't spam the API)
         const timeSinceLastCheck = now - history.lastChecked;
         const checkInterval = this.config.challengeCheckInterval || 60000; // Default 60s
@@ -222,7 +229,8 @@ export class ChallengeManager {
       // The reputation benefit comes from NOT having failedChallenges
     }
 
-    // Remove from active monitoring after resolution
+    // Remove from active monitoring after resolution, keeping the outcome for stats
+    this.resolvedOutcomes[status]++;
     this.submittedChallenges.delete(challengeId);
   }
 
@@ -254,14 +262,14 @@ export class ChallengeManager {
   } {
     const challenges = this.getSubmittedChallenges();
     const pending = challenges.filter((c) => c.status === 'pending').length;
-    const upheld = challenges.filter((c) => c.status === 'upheld').length;
-    const rejected = challenges.filter((c) => c.status === 'rejected').length;
+    const upheld = challenges.filter((c) => c.status === 'upheld').length + this.resolvedOutcomes.upheld;
+    const rejected = challenges.filter((c) => c.status === 'rejected').length + this.resolvedOutcomes.rejected;
 
     const resolved = upheld + rejected;
     const successRate = resolved > 0 ? (upheld / resolved) * 100 : 0;
 
     return {
-      total: challenges.length,
+      total: challenges.length + this.resolvedOutcomes.upheld + this.resolvedOutcomes.rejected,
       pending,
       upheld,
       rejected,
